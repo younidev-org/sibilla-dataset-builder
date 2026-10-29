@@ -10,7 +10,7 @@
     <a href="docs/README.md"><img src="https://img.shields.io/badge/Documentation%20Hub-0969DA?style=for-the-badge&amp;logo=mdbook&amp;logoColor=white" alt="Open the Sibilla Dataset Builder documentation hub"></a>
   </p>
 
-  <p>An offline Rust CLI for extracting static PDF features and assembling reproducible datasets.</p>
+  <p>A Rust CLI for extracting static PDF features and assembling reproducible datasets.</p>
 
   <p align="center">
     <a href="#features">Features</a> •
@@ -25,70 +25,91 @@
 
 ## Features
 
-- 🔎 **Static PDF features:** byte statistics, 256 histogram columns, structural measurements, and separate raw-token and parsed-name counts.
-- ⚙️ **Supervised parsing:** reusable worker processes with timeouts, CPU and memory limits, and Linux network restrictions.
-- 📊 **Typed output:** CSV and Parquet tables with explicit nulls, quality metadata, and optional JSONL failure sidecars.
-- ♻️ **Validated resume:** source-hash checks, synchronized checkpoints, atomic publication, and refusal to overwrite existing outputs.
-- 🧬 **Dataset construction:** exact deduplication, label-conflict handling, reproducible group-aware splits, manifests, reports, and artifact hashes.
-- 🎛️ **Terminal controls:** colored help, progress bars, short options, quiet mode, and clean machine-readable stdout.
-- 🧪 **Safe development:** generated nonmalicious fixtures, nextest checks, and real extraction benchmarks.
+- 🔎 Extract static features from a PDF or a folder of PDFs.
+- 📊 Save features as CSV or Parquet, with explicit nulls for unavailable values.
+- ♻️ Resume interrupted runs without repeating validated records.
+- 🧬 Combine labeled tables, remove exact duplicates, and create train/validation/test splits.
+- 🎛️ Use progress bars, optional colors, short flags, or quiet output for scripts.
+- 🧪 Try generated safe PDFs or measure throughput on your own corpus.
 
 ```mermaid
 flowchart LR
-    Inputs[Input files] --> Discovery[Discovery]
-    Discovery --> Workers[Restricted workers]
-    Workers --> Checkpoints[Checkpoints]
-    Checkpoints --> Tables[CSV or Parquet]
-    Tables --> Dataset[Dataset and splits]
+    PDFs[PDF files] --> Tables[CSV or Parquet features]
+    Tables --> Dataset[Dataset]
+    Dataset --> Splits[Train / validation / test]
 ```
 
 > [!CAUTION]
-> This is a development implementation: `pdf-v1` is not frozen. Worker restrictions are not full filesystem or kernel isolation; use a dedicated VM/container for untrusted inputs. The tool never executes samples, renders PDFs, contacts URLs, or trains models.
+> Use a dedicated VM/container for untrusted files. The tool never executes or renders PDFs, but its worker restrictions are not complete isolation.
 
 <details>
-<summary><strong>Current limitations</strong></summary>
+<summary><strong>Before using the results</strong></summary>
 
-- Temporal evaluation is rejected because the schema has no defensible first-seen timestamps.
-- The full specified PDF feature schema is unfinished; unsupported measurements remain null.
-- Discovery paths and identity/group metadata remain in memory. Feature rows spool to disk, but million-file scaling and external sorting are unfinished.
-- Worker memory, CPU, descriptor, and network controls do not provide complete isolation.
-- Explicit stream measurements share an aggregate decode budget; parser-internal expansion is limited per stream and by process memory. Stronger sandbox and aggregate parser accounting remain unfinished.
-- Benchmarks cover complete extraction; peak memory and storage type are not automatically measured and must be recorded separately.
+- `pdf-v1` is still in development; unsupported measurements remain null.
+- Temporal evaluation and million-file external sorting are not available.
+- Related files need meaningful grouping to avoid leakage between splits.
+- Peak memory and storage type are not measured automatically by benchmarks.
+- Parser-internal decompression is limited per stream and by worker memory; it does not have a complete aggregate accounting limit.
+
+See [feature meanings](docs/FEATURE_SCHEMA.md), [dataset rules](docs/DATASET_PROTOCOL.md), and [security limits](SECURITY.md).
 
 </details>
 
 ## Showcase
 
-No runtime screenshots are included; the [safe demonstration](docs/USAGE.md#safe-demonstration) generates three one-page PDFs and builds a grouped dataset from them.
+See [safe demonstration](docs/USAGE.md#safe-demonstration) generates three one-page PDFs and builds a grouped dataset from them.
 
 ## Quick start
 
-The executable is `target/release/sibilla-b`. Provide your own input files; labels are supplied explicitly and never inferred. The optional private `.fixtures` corpus is not required by CI.
+Use `sibilla-b` on Linux 5.6+ (x86-64 or AArch64). See [releases](docs/RELEASES.md) for packaged binaries or [Development](#development) to build from source.
 
-### Configuration overview
+If you built locally, replace `sibilla-b` below with `target/release/sibilla-b`.
 
-| Area | Configure | Available options |
-| --- | --- | --- |
-| Labels | `--type` | `benign`, `malicious`, `unknown` → `0`, `1`, null |
-| Output | `--output`, `--format` | CSV or Parquet; explicit format overrides the extension |
-| Traversal | `--no-recursive`, `--follow-symlinks` | Recursive by default; symlink following is opt-in |
-| Terminal | `--color`, `--no-color`, `--quiet` | Color defaults to `always`; `auto` and `never` are available |
+### 1. Extract your PDFs
 
-Files are opened read-only and existing outputs are refused. Symlink following can include files outside the input tree. See the [usage guide](docs/USAGE.md) for dataset commands, checkpoint behavior, failure handling, and the synthetic demonstration.
+```sh
+sibilla-b extract pdf -i ./samples/benign --type benign -o ./features/benign.parquet
+sibilla-b extract pdf -i ./samples/malicious --type malicious -o ./features/malicious.csv
+```
+
+Supply the labels yourself. Input files are read-only; output paths must be new.
+
+### 2. Build a dataset
+
+```sh
+sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
+  -o ./datasets/pdf-v1 --split 70:15:15 --seed 42
+```
+
+Open `./datasets/pdf-v1/report.json` to check counts and exclusions. Use `--group-column` when your tables contain meaningful related-file groups.
+
+### 3. Adjust a run
+
+| I want to… | Add this option |
+| --- | --- |
+| Use four workers | `-j 4` on `extract pdf` |
+| Resume an interrupted extraction | `--resume`, keeping the original input and output arguments |
+| Turn colors off | `--no-color` or `--color never` |
+| Hide progress and status | `--quiet` |
+| Save failed or partial records | `--failures failures.jsonl` |
+| Read command help | `--help` |
+
+Start with the [safe demonstration](docs/USAGE.md#safe-demonstration) if you have no PDFs ready. The private `.fixtures` corpus is not required.
 
 ## Development
 
-Install nextest if needed with `cargo install cargo-nextest --locked`.
+Building from source requires Rust 1.88+ and Cargo. Run commands from the repository root.
 
 | Need | Command |
 | --- | --- |
+| Build the CLI | `cargo build --release --locked` |
+| Install the test runner | `cargo install cargo-nextest --locked` |
 | Run tests | `cargo nextest run --workspace --all-targets --locked` |
 | Check formatting | `cargo fmt --all --check` |
 | Run Clippy | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
-| Build the CLI | `cargo build --release --locked` |
 | Generate safe fixtures | `cargo run -p sibilla-b-pdf --example generate_fixtures -- .local/demo/samples` |
 
-Normal CI runs only on pushes to `main`. Version tags trigger qualification and a draft release; the tag must match the workspace version and `main` HEAD. See [CI and releases](docs/RELEASES.md) for checks, archives, checksums, and publication policy.
+For contributor details, see [architecture](docs/ARCHITECTURE.md) and [CI and releases](docs/RELEASES.md#maintainer-reference).
 
 ## Guides
 
@@ -96,12 +117,11 @@ Choose a guide by task, or browse the complete [documentation hub](docs/README.m
 
 | I want to… | Start here |
 | --- | --- |
-| Extract features, resume a run, or try the safe demo | [CLI usage](docs/USAGE.md) |
-| Understand columns, nulls, and measurement limits | [Feature schema](docs/FEATURE_SCHEMA.md) |
-| Build datasets and avoid split leakage | [Dataset protocol](docs/DATASET_PROTOCOL.md) |
-| Understand worker and storage boundaries | [Architecture](docs/ARCHITECTURE.md) |
-| Review input handling and isolation limits | [Security](SECURITY.md) |
-| Understand CI and draft releases | [CI and releases](docs/RELEASES.md) |
+| Extract PDFs, resume, or try sample commands | [CLI usage](docs/USAGE.md) |
+| Combine tables and create reliable splits | [Build a dataset](docs/DATASET_PROTOCOL.md) |
+| Understand missing values and output columns | [Read the feature table](docs/FEATURE_SCHEMA.md) |
+| Handle untrusted PDFs safely | [Security](SECURITY.md) |
+| Use a packaged executable | [Releases](docs/RELEASES.md) |
 
 ## Tech stack
 

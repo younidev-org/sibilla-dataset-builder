@@ -1,51 +1,88 @@
-# Extraction schema (development)
+# Read the feature table
 
 [< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
 
-`pdf-v1` is not frozen until output and all specified PDF features are complete.
+Use the columns as measurements, not a malware verdict. `pdf-v1` is still in development.
 
-Byte statistics use all input bytes; entropy is Shannon bits/byte. Block statistics
-use 4096-byte chunks including the final short chunk, population standard deviation,
-and high entropy means strictly greater than 7.5 bits/byte. Empty input yields zero
-for byte statistics. Histograms contain 256 normalized entries in byte order.
-ASCII is 0–127; printable is 32–126. SHA-256 is identity metadata, never predictive.
+## Start with quality
 
-Raw token counts count byte substrings, including strings, comments and streams;
-parsed-name counts include matching dictionary keys and name values in loaded
-objects. They do not establish action reachability or malicious behavior.
-Malformed PDFs retain byte statistics and raw counts; unavailable semantic fields
-remain null. Oversized inputs have no invented byte statistics. PDF magic must
-begin within the first 1024 bytes. Page counts come from lopdf's page tree.
+| Column | What to check |
+| --- | --- |
+| `extraction_status` | Whether the record is complete, partial, rejected, timed out, or failed |
+| `extraction_parse_status` | Whether parsed measurements are available |
+| `extraction_failure_stage` | Where a problem occurred |
+| `extraction_error_code` | The fixed failure reason |
+| `sample_id` | SHA-256 join key; remove before training |
+| `label` | User-supplied `0`, `1`, or null |
 
-Structural fields now include reference/loaded stream/object-stream counts,
-catalog/metadata/AcroForm key presence, embedded-file and Filespec typed-object counts,
-URI-string count and canonical distinct hosts, raw/decoded stream size statistics,
-filter depth and filter counts, high-entropy stream ratio and raw update/encoded-name
-candidates. URI parsing is lexical and never performs network requests. Raw encoded
-name candidates count #XX escapes in byte tokens and may include text content.
+Unavailable measurements stay null. Do not replace them with zero without an explicit modeling decision.
 
-Stream statistics include all loaded streams, including XRef streams. Missing and
-empty filter chains mean identity decoding. Explicit decoding shares the aggregate
-budget across streams. Unsupported filters or budget exhaustion leave decoded
-statistics null and mark extraction partial. Typed object counts cover loaded objects
-with an explicit /Type; they are not a claim about all historical revisions.
+| Situation | Expected values |
+| --- | --- |
+| Malformed PDF | Byte features and raw counts preserved; unavailable semantic fields null |
+| Oversized file | No invented byte statistics |
+| Password required | `encrypted=true`; byte/raw features preserved; semantic fields null |
+| Empty-password encryption | Still flagged as encrypted after decryption |
+| Unsupported filter or decode budget exceeded | Decoded statistics null; extraction marked partial |
+| Worker killed | Statistics may be unavailable and remain null |
 
-Password-required encryption preserves byte/raw features and encrypted=true, with
-semantic fields null. Empty-password encryption is still flagged after decryption.
+## Choose feature groups
 
-Currently unsupported measurements remain null: total historical XRef-table count
-(lopdf merges tables), duplicate IDs and inaccessible object counts (the loaded map
-cannot recover discarded objects), document-level JavaScript and catalog action
-reachability (graph traversal is not implemented). Embedded-only size summaries and
-complete revision/action graph features remain pending.
+| Group | Includes |
+| --- | --- |
+| Byte statistics | Size, normalized 256-bin histogram, byte ratios, global and block entropy |
+| PDF structure | Header/version, EOF markers, loaded objects/streams/references, catalog flags |
+| Active-content indicators | Separate raw-token and parsed-name counts |
+| Embedded files | Counts of loaded objects with explicit embedded-file or Filespec types |
+| External references | URI strings and distinct canonical hosts, without network access |
+| Streams | Raw/decoded sizes, filter counts/depths, and high-entropy stream ratio |
 
-Quality columns include parse status, failure stage, error code and extraction
-status. Header/magic presence is null when byte features are unavailable, rather
-than false. Typed readers reject incompatible schemas and nonfinite numbers.
-The lopdf decompression limit applies per decoded stream, not to aggregate document
-expansion; worker address-space limits provide an additional ceiling.
+Raw counts can include strings, comments, and stream bytes. Parsed names describe loaded objects. Neither proves action reachability or malicious behavior.
 
-The field list is defined in `sibilla-b-schema` and the flattened Arrow schema in
-`sibilla-b-output`. Histograms are `extraction_common_features_byte_histogram_000`
-through `_255`. Count columns are nullable Int64; measurements Float64; presence
-flags Boolean. CSV null is `\N`, with leading string backslashes escaped.
+## Read numeric values correctly
+
+| Measurement | Definition |
+| --- | --- |
+| Global entropy | Shannon entropy in bits per byte |
+| Block entropy | 4096-byte chunks, including the final short chunk |
+| Block standard deviation | Population standard deviation |
+| High entropy | Strictly greater than 7.5 bits/byte |
+| Histogram | 256 normalized frequencies, in byte order |
+| ASCII ratio | Bytes 0–127 |
+| Printable ratio | Bytes 32–126 |
+| Empty input statistics | Zero for byte statistics |
+| PDF header | Must begin within the first 1024 bytes |
+| Page count | Derived from the parsed page tree |
+
+Histogram columns run from `extraction_common_features_byte_histogram_000` through `_255`.
+
+## Work with CSV or Parquet
+
+| Value | Representation |
+| --- | --- |
+| Missing value in CSV | `\N` |
+| String beginning with a backslash | Leading backslash escaped |
+| Counts | Nullable Int64 |
+| Measurements | Nullable Float64 |
+| Presence flags | Nullable Boolean |
+
+CSV and Parquet preserve the same typed values, including empty strings. Readers reject incompatible schemas and nonfinite numbers.
+
+## Know which measurements are limited
+
+- Stream statistics include every loaded stream, including XRef streams.
+- Missing or empty filter chains mean identity decoding.
+- Explicit decoding shares one aggregate measurement budget across streams.
+- Parser-internal decompression is limited per stream; worker memory adds another ceiling.
+- Typed-object counts cover loaded objects with explicit `/Type`, not every historical revision.
+- Raw encoded-name candidates count `#XX` escapes in byte tokens and may include text.
+
+| Unsupported measurement | Current behavior |
+| --- | --- |
+| Total historical XRef-table count | Null; the parser merges tables |
+| Duplicate object IDs or inaccessible-object counts | Null; discarded objects cannot be recovered from the loaded map |
+| Document-level JavaScript and catalog action reachability | Null; graph traversal is not implemented |
+| Embedded-only size summaries | Not implemented |
+| Complete revision/action graphs | Not implemented |
+
+For exact fields, see [`sibilla-b-schema`](../crates/sibilla-b-schema/src/lib.rs) and the [table schema](../crates/sibilla-b-output/src/lib.rs).

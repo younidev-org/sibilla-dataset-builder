@@ -1,97 +1,146 @@
-# CLI usage and safe demonstration
+# Use the CLI
 
 [< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
 
-`sibilla-b` extracts static PDF features and builds reproducible datasets offline.
-It never executes samples, renders PDFs, contacts URLs or trains models.
-This is a development implementation: see the limitations below.
+Examples assume `sibilla-b` is on your `PATH`. For a local build, use `target/release/sibilla-b` instead.
 
-## Build
+## Extract PDFs
 
-Linux 5.6+ (x86-64 or AArch64), Rust 1.88 or newer:
+### A folder of labeled files
 
 ```sh
-cargo build --release --locked
-cargo nextest run --workspace --all-targets --locked
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
+sibilla-b extract pdf -i ./samples/benign --type benign -o ./features/benign.parquet -j 4
+sibilla-b extract pdf -i ./samples/malicious --type malicious -o ./features/malicious.csv -j 4
 ```
 
-The executable is `target/release/sibilla-b`. Commands below assume the binary is
-on your `PATH`; otherwise use `target/release/sibilla-b` in place of `sibilla-b`.
+### One PDF without a label
 
 ```sh
-sibilla-b extract pdf --input ./samples/benign --type benign \
-  --output ./features/benign.parquet --workers 4
-sibilla-b extract pdf --input ./samples/malicious --type malicious \
-  --output ./features/malicious.csv --workers 4
-sibilla-b dataset build --input ./features/benign.parquet \
-  --input ./features/malicious.csv --output ./datasets/pdf-v1 \
-  --split 70:15:15 --seed 42
-sibilla-b benchmark pdf --input ./samples/benchmark --workers 1,2,4
-sibilla-b extract pdf --schema-version
+sibilla-b extract pdf -i ./sample.pdf -o ./features/sample.csv
 ```
 
-Input files are opened read-only; symlinks are skipped by default and nonregular files rejected.
-`--follow-symlinks` resolves targets explicitly and detects directory cycles; it can
-include files outside the original tree.
-Directory scanning is recursive unless `--no-recursive` is supplied. Labels come
-only from `--type benign|malicious|unknown` (0, 1, null). Unknown rows remain in
-extraction tables but are excluded from labeled datasets.
+The default label is `unknown`. Unknown rows are saved but excluded from labeled datasets.
 
-Each parser process handles one file at a time and is reused. The coordinator
-kills and replaces a timed-out or crashed process, emits a failure row, and keeps
-processing. Byte statistics survive ordinary parse errors; semantic fields remain
-null. A killed process cannot return statistics, so they remain null too.
+| Option | What it does |
+| --- | --- |
+| `-i`, `--input` | Read one file or a directory |
+| `-o`, `--output` | Write a new CSV or Parquet table |
+| `--type benign` | Set label `0` |
+| `--type malicious` | Set label `1` |
+| `--type unknown` | Leave the label null |
+| `-j`, `--workers` | Set the number of parser processes |
+| `--no-recursive` | Skip subdirectories |
+| `--follow-symlinks` | Follow resolved targets, including those outside the input tree |
+| `--format csv` | Override the output filename extension |
+| `--source`, `--collection-id` | Save provenance, not predictive features |
 
-CSV and Parquet contain the same typed flattened fields, including 256 histogram
-columns. CSV uses `\N` for null and escapes a leading backslash in string values;
-empty strings are preserved. `--format csv|parquet` overrides the file extension;
-table readers recognize Parquet magic. `--failures PATH` writes non-success records
-as a separate atomic JSONL sidecar. Sidecars are published independently before the
-feature table; existing paths are refused. Existing output paths are never overwritten.
-Final extraction tables and dataset directories are published atomically.
-Extraction keeps synchronized per-record checkpoints beside the output in
-`.OUTPUT.checkpoints/`. Resume with the original arguments plus `--resume`;
-worker count may change. Source hashes and configuration are validated before reuse.
-Failures without hashes are retried. Checkpoints are locked against concurrent runs
-and retained after success; remove them yourself when no longer needed.
+Input files are opened read-only. Labels are never inferred. Symlinks are skipped unless you opt in; nonregular files are rejected.
 
-Dataset output contains `manifest.parquet`, `features.parquet`, `splits/`,
-`dataset_metadata.json` and `report.json`. `sample_id` in features is a join key:
-remove it before training. Labels, provenance, quality, hashes and timings are in
-the manifest, not predictive feature columns. Exact duplicates with contradictory
-labels fail unless `--conflict-policy quarantine` is supplied. Use
-`--group-column collection_id` (or another existing column) only when it represents
-meaningful related-file groups. Conflicting duplicate group memberships are
-rejected. A random split without grouping does not establish family generalization.
+## Resume an interrupted run
 
-See [schema](FEATURE_SCHEMA.md), [security](../SECURITY.md),
-[architecture](ARCHITECTURE.md), and [dataset protocol](DATASET_PROTOCOL.md).
-The optional `.fixtures` corpus is private and is not required by CI.
-
-## Safe demonstration
+Repeat the original extraction command and add `--resume`:
 
 ```sh
-cargo run -p sibilla-b-pdf --example generate_fixtures -- .local/demo/samples
-sibilla-b extract pdf --input .local/demo/samples --type benign \
-  --output .local/demo/features.parquet --source synthetic-demo \
-  --collection-id safe-generated --workers 2
-sibilla-b dataset build --input .local/demo/features.parquet \
-  --output .local/demo/dataset --group-column collection_id
+sibilla-b extract pdf -i ./samples/benign --type benign \
+  -o ./features/benign.parquet -j 4 --resume
 ```
 
-These three PDFs are generated locally. One shared group deliberately stays in one
-partition; the demonstration is not an evaluation corpus. Outputs must not already
-exist. The example generator checks that its generated PDFs parse to one page.
+- Keep the input, output, label, and provenance arguments unchanged.
+- You may change the worker count.
+- Keep the `.OUTPUT.checkpoints/` directory beside the output.
+- Changed source hashes or configuration stop the resume.
+- Records without a hash are retried.
+- A checkpoint cannot be shared by simultaneous runs.
+
+Existing final outputs are never overwritten. After a completed run, choose a new output path for another extraction. Checkpoints remain after success; remove them when no longer needed.
+
+## Find extraction problems
+
+```sh
+sibilla-b extract pdf -i ./samples/benign --type benign \
+  -o ./features/checked.parquet --failures ./features/failures.jsonl
+```
+
+| Result | What to do |
+| --- | --- |
+| `success` | Use the available measurements |
+| `partial` | Inspect the error code; some measurements are null |
+| `rejected` | Check the file type, size limit, and read permissions |
+| `timeout` | Review the file or retry with a larger `--timeout-seconds` value |
+| `failed` | Inspect the worker failure code before retrying |
+
+Ordinary parse errors preserve byte features. A killed worker cannot return statistics, so those values remain null too.
+
+| Limit | Set with |
+| --- | --- |
+| Input file size | `--max-size-mb` |
+| Wall-clock time per file | `--timeout-seconds` |
+| Explicit decoded stream budget | `--max-decompressed-mb` |
+
+> [!NOTE]
+> The JSONL sidecar is published separately before the feature table. If a later step fails, it may already exist. On resume, omit `--failures` or choose a new sidecar path; existing sidecars are refused.
+
+Final tables are published atomically. Read [security limits](../SECURITY.md) before handling untrusted PDFs.
+
+## Fix common command errors
+
+| Message or situation | Next step |
+| --- | --- |
+| Output already exists | Choose a new output path |
+| Checkpoint directory exists | Reuse the original arguments with `--resume` |
+| Resume configuration or source content changed | Start a new run with a new output path |
+| Another extraction owns the checkpoint | Wait for that run to finish |
+| Incompatible feature tables | Use tables from the same schema and extractor version |
+| No labeled extractable samples | Check labels and extraction status before building the dataset |
+
+## Build a dataset
+
+```sh
+sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
+  -o ./datasets/pdf-v1 --split 70:15:15 --seed 42
+```
+
+See [Build a dataset](DATASET_PROTOCOL.md) for grouping, label conflicts, and output files.
 
 ## Terminal output
 
-Color is enabled by default. Use `sibilla-b --color never --help` or
-`sibilla-b --help --no-color` to disable it; `--color auto` detects terminals.
-`NO_COLOR=1` disables default colors; an explicit `--color` overrides it.
-Progress bars/spinners use stderr on terminals and are hidden in pipes.
-`-q` / `--quiet` suppresses progress and status; errors remain visible.
-Benchmark JSON and schema-version stdout stay machine readable.
-Use `-i` / `-o` for input/output and `-j` for extraction workers.
-Install nextest if needed with `cargo install cargo-nextest --locked`.
+| I want to… | Use |
+| --- | --- |
+| Disable colors | `sibilla-b --no-color --help` |
+| Disable colors with an explicit mode | `sibilla-b --color never --help` |
+| Detect terminal color support | `--color auto` |
+| Disable default colors through the environment | `NO_COLOR=1` |
+| Hide progress and status | `-q` or `--quiet` |
+| Read extraction help | `sibilla-b extract pdf --help` |
+
+Colors default to `always`; an explicit `--color` overrides `NO_COLOR`. Progress uses stderr and is hidden in pipes. Errors remain visible in quiet mode.
+
+Benchmark JSON and schema-version output stay clean on stdout. Use `-i`, `-o`, and `-j` as shortcuts for input, output, and extraction workers.
+
+## Check the schema or benchmark a corpus
+
+```sh
+sibilla-b extract pdf --schema-version
+sibilla-b benchmark pdf -i ./samples/benchmark --workers 1,2,4
+```
+
+Record the storage type and peak memory separately; the benchmark does not measure them automatically.
+
+## Safe demonstration
+
+Run these commands from the repository root. The output paths must not already exist.
+
+```sh
+cargo run -p sibilla-b-pdf --example generate_fixtures -- .local/demo/samples
+sibilla-b extract pdf -i .local/demo/samples --type benign \
+  -o .local/demo/features.parquet --source synthetic-demo \
+  --collection-id safe-generated -j 2
+sibilla-b dataset build -i .local/demo/features.parquet \
+  -o .local/demo/dataset --group-column collection_id
+```
+
+- Generates three safe one-page PDFs and checks that they parse.
+- Keeps the shared group in one partition.
+- Demonstrates the commands; it is not an evaluation corpus.
+
+The private `.fixtures` directory is optional and not required by CI.

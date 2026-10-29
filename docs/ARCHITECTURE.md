@@ -1,30 +1,41 @@
-# Architecture
+# Architecture reference
 
 [< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
 
-The CLI owns user arguments and labels. `sibilla-b-core` owns restricted subprocesses
-and their newline-delimited JSON protocol. `sibilla-b-pdf` implements the extractor
-trait and only consumes bytes and limits; it cannot see labels or split assignments.
-`sibilla-b-common-features` computes shared byte statistics. `sibilla-b-schema` owns
-versioned Rust records. `sibilla-b-output` owns typed Arrow/CSV tables and atomic
-publication. `sibilla-b-dataset` validates tables, deduplicates samples and splits.
+Contributor reference. For commands, start with [CLI usage](USAGE.md).
 
-Extraction discovers files deterministically, feeds a shared job iterator to N
-coordinator threads, each supervising one parser process, and receives results on
-a bounded channel. Records are spooled individually to disk, then ordered by hash
-(with deterministic input order tie-breaks) and streamed into the final table.
-Parquet batches contain at most 512 rows. Output is synchronized and published
-without overwriting existing paths. Current path/shard lists and dataset identity/group maps
-still reside in RAM; full feature rows are spooled to disk; external manifests/sorting remain required for large corpora.
+## Crate responsibilities
 
-The worker uses Linux openat2 with RESOLVE_NO_SYMLINKS, rejecting symlinks in all
-path components, and rejects nonregular files. Full filesystem isolation is not
-provided. Explicit symlink following resolves paths during discovery. Worker stderr is suppressed so parser logs cannot expose sample content.
-The protocol returns fixed failure codes rather than parser-supplied error text.
+| Crate | Responsibility |
+| --- | --- |
+| `sibilla-b-cli` | Commands, presentation, user labels |
+| `sibilla-b-core` | Worker processes, restrictions, supervision, JSON protocol |
+| `sibilla-b-common-features` | Shared byte statistics |
+| `sibilla-b-pdf` | Static PDF parsing; bytes and limits only |
+| `sibilla-b-schema` | Versioned typed records |
+| `sibilla-b-output` | Typed CSV/Arrow/Parquet tables and atomic publication |
+| `sibilla-b-dataset` | Table validation, deduplication, grouped splits |
 
-The feature schema is still in development. Do not silently merge artifacts from
-future incompatible schema revisions. Other formats must implement the trait in
-independent crates without coupling their parsers to orchestration or dataset code.
+## Processing and storage
 
-Feature values and record ordering are deterministic across worker counts; observed
-extraction durations and benchmark timings naturally vary.
+- Deterministic discovery feeds N coordinator threads.
+- Each thread supervises one reusable parser process.
+- Results pass through a bounded channel into per-record disk checkpoints.
+- Records are ordered by hash, with input-order tie-breaks.
+- Parquet batches contain at most 512 rows.
+- Full feature rows spool to disk; paths and identity/group maps remain in RAM.
+- External manifests and sorting are still needed for million-file scale.
+
+## Boundaries
+
+| Boundary | Rule |
+| --- | --- |
+| Extractor inputs | Bytes and limits; no label or split information |
+| Sample opening | Linux `openat2` with `RESOLVE_NO_SYMLINKS`; reject nonregular files |
+| Explicit symlink following | Resolve targets during discovery |
+| Worker logs | Suppress stderr; return fixed failure codes |
+| Isolation | Filesystem/kernel isolation remains incomplete |
+| Output | Synchronize and publish without overwriting existing paths |
+| Determinism | Feature values and ordering stable; observed durations vary |
+
+Keep new format parsers in independent crates. Do not couple parsing to orchestration or dataset logic. Future incompatible schemas must not be silently merged.

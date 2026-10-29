@@ -2,15 +2,21 @@
 
 [< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
 
-Start with a task guide, then consult the references for data semantics and operating limits.
+Pick the task you want to finish.
 
-| Document | Purpose |
+| I want to… | Guide |
 | --- | --- |
-| [CLI usage](USAGE.md) | Build, extract, resume, control terminal output, and run the safe demo |
-| [Feature schema](FEATURE_SCHEMA.md) | Measurement semantics, nulls, types, and unsupported fields |
-| [Dataset protocol](DATASET_PROTOCOL.md) | Labels, deduplication, grouping, reports, and leakage limits |
-| [Architecture](ARCHITECTURE.md) | Crate boundaries, worker protocol, storage, and resource controls |
-| [Security](../SECURITY.md) | Untrusted-input handling and isolation limits |
-| [CI and releases](RELEASES.md) | Main-branch checks, tag qualification, draft assets, and checksums |
+| Extract a PDF or folder | [Extract PDFs](USAGE.md#extract-pdfs) |
+| Continue an interrupted run | [Resume](USAGE.md#resume-an-interrupted-run) |
+| Try the tool without my own files | [Safe demonstration](USAGE.md#safe-demonstration) |
+| Combine labels and create splits | [Build a dataset](DATASET_PROTOCOL.md) |
+| Understand columns or missing values | [Read the feature table](FEATURE_SCHEMA.md) |
+| Turn off colors or progress | [Terminal output](USAGE.md#terminal-output) |
+| Download a packaged CLI | [Releases](RELEASES.md) |
+| Review safety precautions | [Security](../SECURITY.md) |
 
-Commands assume the repository root unless stated otherwise. The schema and implementation remain in development; review the documented limitations before building a research dataset.
+### Contributor references
+
+- [Build and test commands](../README.md#development)
+- [Architecture](ARCHITECTURE.md)
+- [Release workflow](RELEASES.md#maintainer-reference)

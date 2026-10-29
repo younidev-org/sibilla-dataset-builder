@@ -1,13 +1,21 @@
-# Security
+# Handle untrusted PDFs safely
 
 [< Back to Sibilla Dataset Builder](README.md) • [Documentation Hub](docs/README.md)
 
-Treat every input as untrusted, including benign-labeled files. Do not execute,
-render or open samples. Never log raw payloads, scripts, or extracted attachments.
-Labels are supplied by users and must never affect extracted features.
+## Before you start
 
-The worker applies Linux address-space, core-dump, per-job CPU and descriptor limits,
-no_new_privs and a seccomp network-denial filter. The supervisor kills timed-out
-workers. Filesystem access and all kernel attack surfaces are not isolated.
-The public extraction pipeline is not ready. An isolated VM/container remains recommended;
-process limits alone do not provide complete isolation.
+- Use a dedicated VM/container for untrusted files, including benign-labeled samples.
+- Do not execute or render samples or open them in a viewer.
+- Do not put scripts, attachments, raw payloads, or credentials in logs or issues.
+- Supply labels explicitly; they must not influence extracted features.
+
+## Understand the protection limits
+
+| The tool applies… | It does not provide… |
+| --- | --- |
+| Worker address-space, CPU, and file-descriptor limits | Complete protection from parser vulnerabilities |
+| Core-dump restrictions and `no_new_privs` | Full filesystem isolation |
+| A seccomp network-denial filter | Isolation from every kernel attack surface |
+| Supervised wall-clock timeouts | A replacement for a dedicated VM/container |
+
+This is a development implementation; treat the public extraction pipeline as not ready for unrestricted deployment. Process limits alone are not complete isolation.
