@@ -1,5 +1,7 @@
 # Dataset protocol
 
+[< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
+
 Input tables must exactly match the current Arrow/CSV schema, PDF format, schema
 version and extractor version. Labels must be 0, 1 or null; digests use lowercase
 SHA-256 hex. Unknown labels and unavailable extraction results are excluded.

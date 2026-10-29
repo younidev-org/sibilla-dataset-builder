@@ -1,5 +1,7 @@
 # Extraction schema (development)
 
+[< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
+
 `pdf-v1` is not frozen until output and all specified PDF features are complete.
 
 Byte statistics use all input bytes; entropy is Shannon bits/byte. Block statistics

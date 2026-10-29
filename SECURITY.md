@@ -1,5 +1,7 @@
 # Security
 
+[< Back to Sibilla Dataset Builder](README.md) • [Documentation Hub](docs/README.md)
+
 Treat every input as untrusted, including benign-labeled files. Do not execute,
 render or open samples. Never log raw payloads, scripts, or extracted attachments.
 Labels are supplied by users and must never affect extracted features.

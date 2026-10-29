@@ -1,5 +1,7 @@
 # Architecture
 
+[< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
+
 The CLI owns user arguments and labels. `sibilla-b-core` owns restricted subprocesses
 and their newline-delimited JSON protocol. `sibilla-b-pdf` implements the extractor
 trait and only consumes bytes and limits; it cannot see labels or split assignments.
