@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Sibilla Dataset Builder</title>
+  <desc id="desc">The Sibilla mint mountain symbol on a dark rounded square, with a small array of data cells beneath it for the dataset builder tool.</desc>
+  <rect width="256" height="256" rx="49" fill="#18222C"/>
+  <path d="M46 176 L113.7 77.6 L155.5 138.5 L177.9 105.9 L214 176"
+        fill="none" stroke="#B6E6C8" stroke-width="13.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Minimal dataset grid. Kept visually secondary to the Sibilla symbol. -->
+  <g fill="#B6E6C8" opacity="0.85">
+    <rect x="104" y="207" width="11" height="7" rx="2"/>
+    <rect x="122.5" y="207" width="11" height="7" rx="2"/>
+    <rect x="141" y="207" width="11" height="7" rx="2"/>
+    <rect x="104" y="220" width="11" height="7" rx="2" opacity=".55"/>
+    <rect x="122.5" y="220" width="11" height="7" rx="2" opacity=".75"/>
+    <rect x="141" y="220" width="11" height="7" rx="2"/>
+  </g>
+</svg>

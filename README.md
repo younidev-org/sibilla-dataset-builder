@@ -1,4 +1,4 @@
-# Sibilla Dataset Builder
+<a href="https://github.com/younidev-org/sibilla-dataset-builder"><img src="docs/assets/sibilla-dataset-builder-banner.svg" alt="Sibilla Dataset Builder" width="100%"></a>
 
 <div align="center">
 
