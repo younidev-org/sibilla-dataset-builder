@@ -48,3 +48,59 @@ fn extraction_is_deterministic_and_never_overwrites() {
     }
     assert_eq!(results[0], results[1]);
 }
+#[test]
+fn resume_reuses_committed_rows_and_rejects_changed_configuration() {
+    let directory = tempfile::tempdir().unwrap();
+    let input = directory.path().join("sample.pdf");
+    std::fs::write(&input, b"%PDF-1.7\n/JavaScript %%EOF").unwrap();
+    let output = directory.path().join("features.csv");
+    let args = [
+        "extract",
+        "pdf",
+        "--input",
+        input.to_str().unwrap(),
+        "--output",
+        output.to_str().unwrap(),
+        "--type",
+        "benign",
+        "--quiet",
+    ];
+    assert!(
+        Command::new(env!("CARGO_BIN_EXE_sibilla-b"))
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let original = std::fs::read(&output).unwrap();
+    std::fs::remove_file(&output).unwrap();
+    assert!(
+        Command::new(env!("CARGO_BIN_EXE_sibilla-b"))
+            .args(args)
+            .arg("--resume")
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert_eq!(std::fs::read(&output).unwrap(), original);
+    std::fs::remove_file(&output).unwrap();
+    assert!(
+        !Command::new(env!("CARGO_BIN_EXE_sibilla-b"))
+            .args(args)
+            .args(["--resume", "--source", "changed"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    std::fs::write(&input, b"%PDF-1.7\nchanged %%EOF").unwrap();
+    assert!(
+        !Command::new(env!("CARGO_BIN_EXE_sibilla-b"))
+            .args(args)
+            .arg("--resume")
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+}

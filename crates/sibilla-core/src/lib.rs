@@ -131,10 +131,31 @@ pub fn worker_loop(extractor: impl FormatExtractor) -> Result<()> {
     let mut stdout = std::io::stdout().lock();
     for line in stdin.lock().lines() {
         let job: Job = serde_json::from_str(&line?)?;
+        set_cpu_budget(job.limits.timeout_seconds)?;
         let result = read_and_extract(&job, &extractor);
         serde_json::to_writer(&mut stdout, &result)?;
         writeln!(stdout)?;
         stdout.flush()?;
+    }
+    Ok(())
+}
+fn set_cpu_budget(seconds: u64) -> Result<()> {
+    unsafe {
+        let mut usage: libc::rusage = std::mem::zeroed();
+        let mut current: libc::rlimit = std::mem::zeroed();
+        if libc::getrusage(libc::RUSAGE_SELF, &mut usage) != 0
+            || libc::getrlimit(libc::RLIMIT_CPU, &mut current) != 0
+        {
+            bail!("CPU usage unavailable");
+        }
+        let used = (usage.ru_utime.tv_sec as u64).saturating_add(usage.ru_stime.tv_sec as u64);
+        current.rlim_cur = used
+            .saturating_add(seconds)
+            .saturating_add(2)
+            .min(current.rlim_max);
+        if libc::setrlimit(libc::RLIMIT_CPU, &current) != 0 {
+            bail!("CPU restriction failed");
+        }
     }
     Ok(())
 }
@@ -249,5 +270,32 @@ impl Drop for Worker {
     fn drop(&mut self) {
         self.child.kill().ok();
         self.child.wait().ok();
+    }
+}
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn restricted_process_denies_network() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--ignored",
+                "--exact",
+                "tests::restriction_probe",
+                "--test-threads=1",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    #[ignore = "runs in a subprocess because restrictions are irreversible"]
+    fn restriction_probe() {
+        super::restrict_worker().unwrap();
+        let error = std::net::TcpListener::bind("127.0.0.1:0").unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(libc::EPERM));
     }
 }

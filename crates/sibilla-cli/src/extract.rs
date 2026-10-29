@@ -6,7 +6,10 @@ use std::{
     sync::{Arc, Mutex, mpsc},
     time::Instant,
 };
-fn discover(path: &Path, recursive: bool, files: &mut Vec<PathBuf>) -> Result<()> {
+fn discover(path: &Path, recursive: bool, files: &mut Vec<PathBuf>, skip: &Path) -> Result<()> {
+    if path == skip {
+        return Ok(());
+    }
     let metadata = std::fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() {
         return Ok(());
@@ -19,22 +22,24 @@ fn discover(path: &Path, recursive: bool, files: &mut Vec<PathBuf>) -> Result<()
         for entry in entries {
             let kind = entry.file_type()?;
             if kind.is_file() || (recursive && kind.is_dir()) {
-                discover(&entry.path(), recursive, files)?;
+                discover(&entry.path(), recursive, files, skip)?;
             }
         }
     }
     Ok(())
 }
 pub fn run(args: Extract) -> Result<()> {
-    if args.resume || args.follow_symlinks || args.format.is_some() || args.failures.is_some() {
-        bail!(
-            "resume, symlink traversal, explicit format and failure sidecars are not available yet"
-        );
+    if args.follow_symlinks || args.format.is_some() || args.failures.is_some() {
+        bail!("symlink traversal, explicit format and failure sidecars are not available yet");
     }
     if args.workers == 0 || args.workers > 256 || args.timeout_seconds == 0 {
         bail!("workers must be 1..256 and timeout must be positive");
     }
     let input = args.input.context("input required")?;
+    if std::fs::symlink_metadata(&input)?.file_type().is_symlink() {
+        bail!("input symlinks are not followed");
+    }
+    let input = std::fs::canonicalize(input)?;
     let output = args.output.context("output required")?;
     if output.exists() {
         bail!("output already exists");
@@ -50,23 +55,77 @@ pub fn run(args: Extract) -> Result<()> {
             .context("decompression limit overflow")?,
         timeout_seconds: args.timeout_seconds,
     };
+    let parent = output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let checkpoint = std::fs::canonicalize(parent)?.join(format!(
+        ".{}.checkpoints",
+        output
+            .file_name()
+            .context("output file name")?
+            .to_string_lossy()
+    ));
     let mut files = Vec::new();
-    discover(&input, !args.no_recursive, &mut files)?;
+    discover(&input, !args.no_recursive, &mut files, &checkpoint)?;
     if files.is_empty() {
         bail!("no input files");
     }
     let total = files.len();
-    // shortcut: paths are held in memory; use a disk discovery manifest for million-file corpora.
-    let jobs = Arc::new(Mutex::new(files.into_iter().enumerate()));
-    let spool = tempfile::tempdir()?;
-    let executable = std::env::current_exe()?;
-    let started = Instant::now();
-    let (tx, rx) = mpsc::sync_channel(args.workers * 2);
     let label = match args.label {
         Label::Benign => Some(0),
         Label::Malicious => Some(1),
         Label::Unknown => None,
     };
+    let manifest = serde_json::json!({"schema":sibilla_schema::SCHEMA_VERSION,"version":env!("CARGO_PKG_VERSION"),"input":input,"files":files,"limits":limits,"label":label,"source":args.source,"collection_id":args.collection_id,"recursive":!args.no_recursive});
+    if !args.resume {
+        std::fs::create_dir(&checkpoint).context("checkpoint directory exists; use --resume")?;
+    }
+    let _lock = checkpoint_lock(&checkpoint)?;
+    if args.resume {
+        if std::fs::symlink_metadata(&checkpoint)?
+            .file_type()
+            .is_symlink()
+        {
+            bail!("checkpoint must not be a symlink");
+        }
+        let previous: serde_json::Value =
+            serde_json::from_reader(std::fs::File::open(checkpoint.join("manifest.json"))?)?;
+        if manifest != previous {
+            bail!("resume configuration or discovery manifest changed");
+        }
+    } else {
+        atomic_record(&checkpoint.join("manifest.json"), &manifest)?;
+    }
+    let mut pending = Vec::new();
+    let mut reused = 0;
+    for (index, path) in files.into_iter().enumerate() {
+        let shard = checkpoint.join(format!("{index:020}.json"));
+        if args.resume && shard.exists() {
+            let record: Record = serde_json::from_reader(std::fs::File::open(&shard)?)?;
+            if record.label != label
+                || record.feature_schema_version != sibilla_schema::SCHEMA_VERSION
+                || record.source_dataset != args.source
+                || record.collection_id != args.collection_id
+            {
+                bail!("checkpoint record metadata mismatch");
+            }
+            if let Some(expected) = record.sample_id {
+                if fingerprint(&path, limits.max_size_bytes)? != expected {
+                    bail!("resume input content changed");
+                }
+                reused += 1;
+                continue;
+            }
+        }
+        pending.push((index, path));
+    }
+    // shortcut: paths are held in memory; use a disk discovery manifest for million-file corpora.
+    let jobs = Arc::new(Mutex::new(pending.into_iter()));
+    let executable = std::env::current_exe()?;
+    let started = Instant::now();
+    let (tx, rx) = mpsc::sync_channel(args.workers * 2);
     let root = if input.is_dir() {
         input.as_path()
     } else {
@@ -109,14 +168,13 @@ pub fn run(args: Extract) -> Result<()> {
             });
         }
         drop(tx);
-        let mut completed = 0;
+        let mut completed = reused;
         for (index, path, duration, result) in rx {
             let extraction = result?;
             let sample_id = extraction
                 .common_features
                 .as_ref()
                 .map(|f| f.sha256.clone());
-            let key = sample_id.clone().unwrap_or_else(|| format!("~{index:020}"));
             let record = Record {
                 sample_id,
                 label,
@@ -134,8 +192,7 @@ pub fn run(args: Extract) -> Result<()> {
                 extraction_duration_ms: duration,
                 extraction,
             };
-            let file = std::fs::File::create(spool.path().join(format!("{key}-{index:020}.json")))?;
-            serde_json::to_writer(file, &record)?;
+            atomic_record(&checkpoint.join(format!("{index:020}.json")), &record)?;
             completed += 1;
             if !args.quiet && (completed % 100 == 0 || completed == total) {
                 eprintln!(
@@ -149,12 +206,18 @@ pub fn run(args: Extract) -> Result<()> {
         }
         Ok(())
     })?;
-    let mut shards = std::fs::read_dir(spool.path())?.collect::<std::io::Result<Vec<_>>>()?;
-    shards.sort_by_key(|e| e.file_name());
+    let mut shards = Vec::with_capacity(total);
+    for index in 0..total {
+        let path = checkpoint.join(format!("{index:020}.json"));
+        let record: Record = serde_json::from_reader(std::fs::File::open(&path)?)?;
+        let key = record.sample_id.unwrap_or_else(|| format!("~{index:020}"));
+        shards.push((key, index, path));
+    }
+    shards.sort_by(|a, b| (&a.0, a.1).cmp(&(&b.0, b.1)));
     let mut succeeded = 0;
     let mut partial = 0;
     let rows = shards.into_iter().map(|entry| -> Result<_> {
-        let record: Record = serde_json::from_reader(std::fs::File::open(entry.path())?)?;
+        let record: Record = serde_json::from_reader(std::fs::File::open(entry.2)?)?;
         match record.extraction.status {
             Status::Success => succeeded += 1,
             Status::Partial => partial += 1,
@@ -171,4 +234,57 @@ pub fn run(args: Extract) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn atomic_record(path: &Path, value: &impl serde::Serialize) -> Result<()> {
+    use std::io::Write;
+    let parent = path.parent().context("checkpoint parent")?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    serde_json::to_writer(temporary.as_file_mut(), value)?;
+    temporary.flush()?;
+    temporary.as_file().sync_all()?;
+    temporary.persist(path).context("commit checkpoint")?;
+    std::fs::File::open(parent)?.sync_all()?;
+    Ok(())
+}
+fn fingerprint(path: &Path, limit: u64) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    if !file.metadata()?.is_file() || file.metadata()?.len() > limit {
+        bail!("resume input size changed");
+    }
+    let mut hash = Sha256::new();
+    let mut buffer = [0; 65536];
+    let mut size = 0;
+    loop {
+        let n = file.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        size += n as u64;
+        if size > limit {
+            bail!("resume input size changed");
+        }
+        hash.update(&buffer[..n]);
+    }
+    Ok(format!("{:x}", hash.finalize()))
+}
+
+fn checkpoint_lock(path: &Path) -> Result<std::fs::File> {
+    if std::fs::symlink_metadata(path)?.file_type().is_symlink() {
+        bail!("checkpoint must not be a symlink");
+    }
+    use std::os::unix::fs::OpenOptionsExt;
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path.join("lock"))?;
+    use std::os::fd::AsRawFd;
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        bail!("another extraction owns this checkpoint");
+    }
+    Ok(file)
 }

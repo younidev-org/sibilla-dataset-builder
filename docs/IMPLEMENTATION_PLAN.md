@@ -51,3 +51,10 @@ Executable: `sibilla-b`. No commits or pushes authorized.
   sidecars, temporal mode, external sort/discovery, CPU/aggregate decode accounting,
   expanded safe fixture matrix and full-corpus benchmarks. Public flags reject
   unsupported behavior rather than pretending to implement it.
+
+- Checkpoint milestone: durable per-row shards, configuration/discovery validation,
+  source hash validation on resume, process-level locking, and deterministic reuse.
+  Failures without byte identity are retried. Checkpoint reuse/config/content tests
+  pass, as do timeout kill and actual subprocess seccomp network-denial checks.
+- Per-job CPU budgets now supplement supervising wall-clock limits. Dataset JSON
+  metadata and report files are synchronized before directory publication.

@@ -43,6 +43,11 @@ CSV and Parquet contain the same typed flattened fields, including 256 histogram
 columns. CSV uses `\N` for null and escapes a leading backslash in string values;
 empty strings are preserved. Existing output paths are never overwritten.
 Final extraction tables and dataset directories are published atomically.
+Extraction keeps synchronized per-record checkpoints beside the output in
+`.OUTPUT.checkpoints/`. Resume with the original arguments plus `--resume`;
+worker count may change. Source hashes and configuration are validated before reuse.
+Failures without hashes are retried. Checkpoints are locked against concurrent runs
+and retained after success; remove them yourself when no longer needed.
 
 Dataset output contains `manifest.parquet`, `features.parquet`, `splits/`,
 `dataset_metadata.json` and `report.json`. `sample_id` in features is a join key:
@@ -55,7 +60,7 @@ rejected. A random split without grouping does not establish family generalizati
 
 ## Current limitations
 
-- Resume, explicit format override, failure sidecars, symlink following and temporal
+- Explicit format override, failure sidecars, symlink following and temporal
   evaluation are rejected explicitly; they are not implemented yet.
 - Byte statistics and initial PDF structural/raw/parsed-name counts work. The full
   specified PDF feature schema is unfinished; `pdf-v1` is not frozen.
@@ -64,7 +69,7 @@ rejected. A random split without grouping does not establish family generalizati
 - Linux worker controls limit address space and descriptors and deny networking;
   they are not full filesystem/kernel isolation. Use a dedicated VM/container.
 - A decompression ceiling applies per stream. Aggregate decompression accounting,
-  CPU limits, recursion controls and stronger sandbox validation remain unfinished.
+  recursion controls and stronger sandbox validation remain unfinished.
 - Benchmarks measure complete extraction. Peak memory and storage type are not
   automatically measured; record them separately before performance comparisons.
 

@@ -20,6 +20,10 @@ tempfile = "3"
 
 sibilla-dataset = { path = "../sibilla-dataset" }
 
+sha2.workspace = true
+
+libc = "0.2"
+
 [[bin]]
 name = "sibilla-b"
 path = "src/main.rs"

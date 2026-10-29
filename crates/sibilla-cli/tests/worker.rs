@@ -46,3 +46,25 @@ fn exited_worker_becomes_failure_record() {
     assert_eq!(row.status, Status::Failed);
     assert!(!worker.alive().unwrap());
 }
+#[test]
+fn timed_out_process_is_killed() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("sleep-worker");
+    std::fs::write(&executable, b"#!/bin/sh\nexec sleep 10\n").unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let mut worker = Worker::start(&executable).unwrap();
+    let started = std::time::Instant::now();
+    let row = worker
+        .extract(&Job {
+            path: "unused".into(),
+            limits: Limits {
+                timeout_seconds: 0,
+                ..Limits::default()
+            },
+        })
+        .unwrap();
+    assert_eq!(row.status, Status::Timeout);
+    assert!(!worker.alive().unwrap());
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}

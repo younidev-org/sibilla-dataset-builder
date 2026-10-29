@@ -271,7 +271,7 @@ pub fn build(
         .map(|(key, count)| (key.clone(), *count as f64 / samples.rows.len() as f64))
         .collect();
     let report = json!({"samples":samples.rows.len(),"duplicates":samples.duplicates,"conflicts":samples.conflicts,"quarantined_sample_ids":samples.quarantined,"excluded":samples.excluded,"splits":split_counts,"null_counts":null_counts,"null_rates":null_rates,"class_counts_per_split":class_counts});
-    std::fs::write(
+    write_synced(
         root.join("report.json"),
         serde_json::to_vec_pretty(&report)?,
     )?;
@@ -296,12 +296,13 @@ pub fn build(
         }
         hashes.insert(path, format!("{:x}", hash.finalize()));
     }
-    std::fs::write(
+    write_synced(
         root.join("dataset_metadata.json"),
         serde_json::to_vec_pretty(
             &json!({"schema":sibilla_schema::SCHEMA_VERSION,"extractor_version":env!("CARGO_PKG_VERSION"),"seed":seed,"split":split,"group_column":group,"artifact_sha256":hashes,"strategy":"seeded group allocation with label balancing","identity_column":"sample_id is a join key; remove before training"}),
         )?,
     )?;
+    std::fs::File::open(root)?.sync_all()?;
     // Linux no-replace rename keeps a concurrent creator's directory intact.
     use std::os::unix::ffi::OsStrExt;
     let from = std::ffi::CString::new(root.as_os_str().as_bytes())?;
@@ -320,6 +321,13 @@ pub fn build(
     }
     let _ = staging.keep();
     std::fs::File::open(parent)?.sync_all()?;
+    Ok(())
+}
+fn write_synced(path: PathBuf, bytes: Vec<u8>) -> Result<()> {
+    use std::io::Write;
+    let mut file = std::fs::File::create(path)?;
+    file.write_all(&bytes)?;
+    file.sync_all()?;
     Ok(())
 }
 #[cfg(test)]
