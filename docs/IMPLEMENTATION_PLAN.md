@@ -32,3 +32,9 @@ Executable: `sibilla-b`. No commits or pushes authorized.
   until their implementation milestone; no extraction functionality claimed.
 - Ruling: use requested current checkout on codex/implement-sibilla-b.
 - User authorized milestone commits; use Codex attribution and Odoo-style messages.
+- Parser milestone: generated one-page PDF, malformed, empty and oversized cases
+  pass; all ten sampled local fixture PDFs returned successful parser records.
+- Reusable Linux worker protocol implemented with memory/descriptor limits,
+  no_new_privs, network denial, protocol errors and supervisor timeout handling.
+  Worker reuse/missing-file and malformed-protocol integration tests pass.
+- Remaining Stage 1 features and output are not complete. Do not freeze pdf-v1.

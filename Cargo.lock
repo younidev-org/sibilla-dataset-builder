@@ -633,6 +633,8 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
+ "sibilla-core",
+ "sibilla-pdf",
  "sibilla-schema",
 ]
 
@@ -652,8 +654,10 @@ name = "sibilla-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libc",
  "serde",
  "serde_json",
+ "sibilla-common-features",
  "sibilla-schema",
 ]
 

@@ -13,6 +13,8 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
+    #[command(hide = true)]
+    Worker,
     Extract {
         #[command(subcommand)]
         format: Format,
@@ -105,6 +107,7 @@ struct Benchmark {
 }
 fn main() -> Result<()> {
     match Cli::parse().command {
+        Command::Worker => sibilla_core::worker_loop(sibilla_pdf::PdfExtractor)?,
         Command::Extract {
             format: Format::Pdf(args),
         } if args.schema_version => println!("{}", sibilla_schema::SCHEMA_VERSION),

@@ -12,6 +12,9 @@ anyhow.workspace = true
 sibilla-schema = { path = "../sibilla-schema" }
 clap.workspace = true
 
+sibilla-core = { path = "../sibilla-core" }
+sibilla-pdf = { path = "../sibilla-pdf" }
+
 [[bin]]
 name = "sibilla-b"
 path = "src/main.rs"
