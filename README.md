@@ -87,7 +87,7 @@ The optional `.fixtures` corpus is private and is not required by CI.
 ## Safe demonstration
 
 ```sh
-cargo run -p sibilla-pdf --example generate_fixtures -- .local/demo/samples
+cargo run -p sibilla-b-pdf --example generate_fixtures -- .local/demo/samples
 sibilla-b extract pdf --input .local/demo/samples --type benign \
   --output .local/demo/features.parquet --source synthetic-demo \
   --collection-id safe-generated --workers 2
@@ -109,3 +109,18 @@ Progress bars/spinners use stderr on terminals and are hidden in pipes.
 Benchmark JSON and schema-version stdout stay machine readable.
 Use `-i` / `-o` for input/output and `-j` for extraction workers.
 Install nextest if needed with `cargo install cargo-nextest --locked`.
+
+## CI and releases
+
+Normal CI runs only for pushes to `main`. Pushing a `v*` tag starts release
+qualification; the tag must equal `v` plus the workspace version (currently
+`v0.1.0`) and point to `main` HEAD. The workflow checks formatting, Clippy and
+nextest before building the optimized CLI.
+
+Successful qualification creates a **draft** GitHub release with generated notes,
+`SHA256SUMS`, and a `sibilla-b-VERSION-x86_64-unknown-linux-gnu.tar.gz` archive.
+The archive preserves executable permissions and includes the CLI, README,
+license, security guidance and documentation. The binary is built on Ubuntu 24.04
+for Linux x86-64 GNU; other supported Linux systems can build from source.
+Release drafts require manual review/publication. There is no manual workflow
+trigger and no release creation for branch pushes or pull requests.

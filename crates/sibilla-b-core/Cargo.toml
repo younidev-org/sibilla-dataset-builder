@@ -1,0 +1,14 @@
+[package]
+name = "sibilla-b-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+sibilla-b-schema = { path = "../sibilla-b-schema" }
+libc = "0.2"
+sibilla-b-common-features = { path = "../sibilla-b-common-features" }

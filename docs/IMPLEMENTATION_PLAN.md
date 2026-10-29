@@ -92,3 +92,24 @@ Authority: `.local/SIBILLA_DATASET_BUILDER.md` (local specification).
   ignored by the harness and executed by its parent subprocess test. Clippy/fmt pass.
 - Pseudo-terminal checks verified bars with and without color and clean stdout.
   Independent code review found no actionable issues. No full-corpus benchmark rerun.
+
+## Crate naming, function docs and release automation
+
+- Renamed all seven crate directories, package names, dependencies, Rust imports,
+  lockfile entries and documentation references to sibilla-b-*; binary remains sibilla-b.
+- All 84 Rust functions have a one-line rustdoc, including private functions, tests,
+  examples, trait declarations and trait implementations; no runtime logic changed.
+- CI now runs exclusively for main branch pushes. Release workflow mirrors local
+  neutral-lang qualification/checksum/draft publication, but triggers only on v* tags.
+- Tag must match the workspace version and main HEAD. Read-only qualification runs
+  nextest/fmt/clippy and builds the optimized CLI; only draft publication has contents:write.
+- Release asset is a Linux host archive containing the executable, license and docs,
+  plus SHA256SUMS. No tags, pushes or remote release operations performed locally.
+- Verification: 26 nextest tests pass; one intentionally ignored network probe is
+  invoked by its parent test. Formatting/Clippy pass; all 84 functions audited for
+  rustdoc, all seven package names and workflow triggers/permissions checked.
+- Optimized CLI build and exact release packaging step pass locally. Archive
+  checksum, executable permissions and included documentation verified; extracted
+  executable successfully extracts synthetic PDFs and builds their grouped dataset.
+- Independent review found only missing archive docs, which were included. GitHub
+  runner execution and remote release upload remain untested; no remote side effects.

@@ -1,11 +1,11 @@
 # Architecture
 
-The CLI owns user arguments and labels. `sibilla-core` owns restricted subprocesses
-and their newline-delimited JSON protocol. `sibilla-pdf` implements the extractor
+The CLI owns user arguments and labels. `sibilla-b-core` owns restricted subprocesses
+and their newline-delimited JSON protocol. `sibilla-b-pdf` implements the extractor
 trait and only consumes bytes and limits; it cannot see labels or split assignments.
-`sibilla-common-features` computes shared byte statistics. `sibilla-schema` owns
-versioned Rust records. `sibilla-output` owns typed Arrow/CSV tables and atomic
-publication. `sibilla-dataset` validates tables, deduplicates samples and splits.
+`sibilla-b-common-features` computes shared byte statistics. `sibilla-b-schema` owns
+versioned Rust records. `sibilla-b-output` owns typed Arrow/CSV tables and atomic
+publication. `sibilla-b-dataset` validates tables, deduplicates samples and splits.
 
 Extraction discovers files deterministically, feeds a shared job iterator to N
 coordinator threads, each supervising one parser process, and receives results on

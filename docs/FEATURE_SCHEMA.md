@@ -43,7 +43,7 @@ than false. Typed readers reject incompatible schemas and nonfinite numbers.
 The lopdf decompression limit applies per decoded stream, not to aggregate document
 expansion; worker address-space limits provide an additional ceiling.
 
-The field list is defined in `sibilla-schema` and the flattened Arrow schema in
-`sibilla-output`. Histograms are `extraction_common_features_byte_histogram_000`
+The field list is defined in `sibilla-b-schema` and the flattened Arrow schema in
+`sibilla-b-output`. Histograms are `extraction_common_features_byte_histogram_000`
 through `_255`. Count columns are nullable Int64; measurements Float64; presence
 flags Boolean. CSV null is `\N`, with leading string backslashes escaped.
