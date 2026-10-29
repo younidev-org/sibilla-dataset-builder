@@ -203,13 +203,19 @@ impl Worker {
         })
     }
     pub fn extract(&mut self, job: &Job) -> Result<Extraction> {
-        serde_json::to_writer(&mut self.input, job)?;
-        writeln!(self.input)?;
-        self.input.flush()?;
-        match self
-            .results
-            .recv_timeout(std::time::Duration::from_secs(job.limits.timeout_seconds))
-        {
+        let sent = (|| -> Result<()> {
+            serde_json::to_writer(&mut self.input, job)?;
+            writeln!(self.input)?;
+            self.input.flush()?;
+            Ok(())
+        })();
+        let received = if sent.is_ok() {
+            self.results
+                .recv_timeout(std::time::Duration::from_secs(job.limits.timeout_seconds))
+        } else {
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
+        };
+        match received {
             Ok(Ok(row)) => Ok(row),
             result => {
                 self.child.kill().ok();

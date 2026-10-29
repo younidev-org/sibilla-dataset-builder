@@ -9,6 +9,3 @@ no_new_privs and a seccomp network-denial filter. The supervisor kills timed-out
 workers. Filesystem access and all kernel attack surfaces are not isolated.
 The public extraction pipeline is not ready. An isolated VM/container remains recommended;
 process limits alone do not provide complete isolation.
-
-Report vulnerabilities privately to the repository maintainers. Do not attach
-malware, credentials, private source paths or sensitive sample content to issues.

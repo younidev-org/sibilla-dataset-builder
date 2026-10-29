@@ -38,3 +38,16 @@ Executable: `sibilla-b`. No commits or pushes authorized.
   no_new_privs, network denial, protocol errors and supervisor timeout handling.
   Worker reuse/missing-file and malformed-protocol integration tests pass.
 - Remaining Stage 1 features and output are not complete. Do not freeze pdf-v1.
+- Extraction/table/dataset milestone: bounded results channel, deterministic
+  spooling, atomic typed CSV/Parquet, label-aware dedup, conflict quarantine,
+  group-safe seeded allocation, manifest/features/splits/report/metadata and hashes.
+- CLI benchmark measures real complete extraction with configurable worker counts.
+- Ten local fixture PDFs passed extraction and dataset construction via both CSV
+  and Parquet. Debug build benchmark: 11.65 files/s (1 worker), 22.38 files/s (2),
+  1,573,576 input bytes, no non-success rows. Small warm-cache sample; no broad claim.
+- Independent review: fixed broken-pipe crash recovery, duplicate group mismatch,
+  CSV empty/null ambiguity and canonical hash validation. Regression tests added.
+- Incomplete: resume/checkpoints, full PDF feature schema, explicit format/failure
+  sidecars, temporal mode, external sort/discovery, CPU/aggregate decode accounting,
+  expanded safe fixture matrix and full-corpus benchmarks. Public flags reject
+  unsupported behavior rather than pretending to implement it.

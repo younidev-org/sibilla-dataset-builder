@@ -1,3 +1,5 @@
+mod benchmark;
+mod extract;
 use anyhow::{Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -111,9 +113,38 @@ fn main() -> Result<()> {
         Command::Extract {
             format: Format::Pdf(args),
         } if args.schema_version => println!("{}", sibilla_schema::SCHEMA_VERSION),
-        _ => bail!(
-            "This foundation build exposes the CLI contract; extraction, datasets and benchmarks are not implemented yet"
-        ),
+        Command::Extract {
+            format: Format::Pdf(args),
+        } => extract::run(args)?,
+        Command::Dataset {
+            command: Dataset::Build(args),
+        } => {
+            if args.temporal_column.is_some() {
+                bail!("temporal mode requires timestamps not present in the current schema");
+            }
+            let split: Vec<u64> = args
+                .split
+                .split(':')
+                .map(str::parse)
+                .collect::<std::result::Result<_, _>>()?;
+            let split: [u64; 3] = split
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("split requires TRAIN:VAL:TEST"))?;
+            if !matches!(args.conflict_policy.as_str(), "error" | "quarantine") {
+                bail!("invalid conflict policy");
+            }
+            sibilla_dataset::build(
+                &args.input,
+                &args.output,
+                split,
+                args.seed,
+                args.group_column.as_deref(),
+                args.conflict_policy == "quarantine",
+            )?;
+        }
+        Command::Benchmark {
+            format: BenchmarkFormat::Pdf(args),
+        } => benchmark::run(args)?,
     }
     Ok(())
 }

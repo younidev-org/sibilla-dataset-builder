@@ -10,3 +10,8 @@ serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 sibilla-schema = { path = "../sibilla-schema" }
+sibilla-output = { path = "../sibilla-output" }
+arrow-schema = "60"
+sha2.workspace = true
+tempfile = "3"
+libc = "0.2"
