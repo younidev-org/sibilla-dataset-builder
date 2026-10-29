@@ -8,7 +8,7 @@ Start with feature tables produced by `extract pdf`.
 
 ```sh
 sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
-  -o ./datasets/pdf-v1 --split 70:15:15 --seed 42
+  -o ./datasets/pdf-v1 --split 70:15:15 --seed 42 -j 4
 ```
 
 | Option | Meaning |
@@ -17,6 +17,7 @@ sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv
 | `-o` | New dataset directory |
 | `--split 70:15:15` | Train, validation, and test percentages |
 | `--seed 42` | Reproduce the same group allocation |
+| `-j`, `--workers` | Output writer limit; 1 runs sequentially, 2 or more allows both table writers |
 
 Tables must match the current PDF format, column schema, schema version, and extractor version. Labels must be `0`, `1`, or null; sample identities use lowercase SHA-256 hex.
 
@@ -78,3 +79,9 @@ Existing destination directories are refused. Publication is atomic and uses Lin
 - Groups are ordered by a seeded SHA-256 key and allocated using label-balance targets.
 - Exact duplicates retain one feature row.
 - Temporal evaluation is unavailable: the schema has no defensible first-seen timestamps.
+
+## Performance
+
+With `-j 2` or higher, manifest and feature-table writers run concurrently through bounded queues. The spool is read once for both tables and null statistics. With `-j 1`, tables are written sequentially using two read passes.
+
+There are currently two heavy output tasks, so values above 2 do not add more table writers. Ingestion, deduplication and split assignment remain sequential; more workers do not guarantee maximum CPU use or a faster run on a slow disk.

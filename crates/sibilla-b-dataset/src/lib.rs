@@ -191,7 +191,11 @@ pub fn build(
     seed: u64,
     group: Option<&str>,
     quarantine: bool,
+    workers: usize,
 ) -> Result<()> {
+    if !(1..=256).contains(&workers) {
+        bail!("workers must be 1..256");
+    }
     if split.iter().any(|&p| p > 100) || split.iter().sum::<u64>() != 100 {
         bail!("split percentages must sum to 100");
     }
@@ -230,11 +234,6 @@ pub fn build(
     std::fs::create_dir_all(parent)?;
     let staging = tempfile::tempdir_in(parent)?;
     let root = staging.path();
-    sibilla_b_output::write(
-        &root.join("manifest.parquet"),
-        schema.clone(),
-        samples.records(),
-    )?;
     let feature_fields: Vec<_> = schema
         .fields()
         .iter()
@@ -246,10 +245,12 @@ pub fn build(
         })
         .cloned()
         .collect();
-    sibilla_b_output::write(
-        &root.join("features.parquet"),
+    let null_counts = write_tables(
+        &samples,
+        root,
+        schema.clone(),
         Arc::new(Schema::new(feature_fields)),
-        samples.records(),
+        workers,
     )?;
     let split_schema = Arc::new(Schema::new(vec![
         Field::new("sample_id", DataType::Utf8, false),
@@ -273,19 +274,6 @@ pub fn build(
             split_schema.clone(),
             rows.into_iter().map(Ok),
         )?;
-    }
-    let mut null_counts: BTreeMap<String, usize> = schema
-        .fields()
-        .iter()
-        .map(|f| (f.name().clone(), 0))
-        .collect();
-    for row in samples.records() {
-        let row = row?;
-        for (name, count) in &mut null_counts {
-            if row.get(name).is_none_or(Value::is_null) {
-                *count += 1;
-            }
-        }
     }
     let mut class_counts: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
     for (id, row) in &samples.rows {
@@ -352,6 +340,82 @@ pub fn build(
     std::fs::File::open(parent)?.sync_all()?;
     Ok(())
 }
+/// Write deterministic feature tables with bounded fan-out and count nulls in the same read pass.
+fn write_tables(
+    samples: &Samples,
+    root: &Path,
+    schema: Arc<Schema>,
+    features: Arc<Schema>,
+    workers: usize,
+) -> Result<BTreeMap<String, usize>> {
+    let mut counts: BTreeMap<String, usize> = schema
+        .fields()
+        .iter()
+        .map(|f| (f.name().clone(), 0))
+        .collect();
+    if workers == 1 {
+        let rows = samples.records().map(|row| {
+            let row = row?;
+            count_nulls(&row, &mut counts);
+            Ok(row)
+        });
+        sibilla_b_output::write(&root.join("manifest.parquet"), schema, rows)?;
+        sibilla_b_output::write(&root.join("features.parquet"), features, samples.records())?;
+    } else {
+        std::thread::scope(|scope| -> Result<()> {
+            let (manifest_tx, manifest_rx) = std::sync::mpsc::sync_channel::<Row>(16);
+            let (features_tx, features_rx) = std::sync::mpsc::sync_channel::<Row>(16);
+            let manifest = scope.spawn(move || {
+                sibilla_b_output::write(
+                    &root.join("manifest.parquet"),
+                    schema,
+                    manifest_rx.into_iter().map(Ok),
+                )
+            });
+            let feature = scope.spawn(move || {
+                sibilla_b_output::write(
+                    &root.join("features.parquet"),
+                    features,
+                    features_rx.into_iter().map(Ok),
+                )
+            });
+            let produced = (|| -> Result<()> {
+                for row in samples.records() {
+                    let row = row?;
+                    count_nulls(&row, &mut counts);
+                    manifest_tx
+                        .send(row.clone())
+                        .map_err(|_| anyhow::anyhow!("manifest writer stopped"))?;
+                    features_tx
+                        .send(row)
+                        .map_err(|_| anyhow::anyhow!("feature writer stopped"))?;
+                }
+                Ok(())
+            })();
+            drop(manifest_tx);
+            drop(features_tx);
+            let manifest_result = manifest
+                .join()
+                .map_err(|_| anyhow::anyhow!("manifest writer panicked"))?;
+            let feature_result = feature
+                .join()
+                .map_err(|_| anyhow::anyhow!("feature writer panicked"))?;
+            manifest_result?;
+            feature_result?;
+            produced
+        })?;
+    }
+    Ok(counts)
+}
+/// Count unavailable fields without rereading the spool for a separate reporting pass.
+fn count_nulls(row: &Row, counts: &mut BTreeMap<String, usize>) {
+    for (name, count) in counts {
+        if row.get(name).is_none_or(Value::is_null) {
+            *count += 1;
+        }
+    }
+}
+
 /// Write and synchronize a generated JSON artifact before publication.
 fn write_synced(path: PathBuf, bytes: Vec<u8>) -> Result<()> {
     use std::io::Write;
@@ -363,6 +427,22 @@ fn write_synced(path: PathBuf, bytes: Vec<u8>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Verify a failed output writer stops bounded fan-out without overwriting an existing file.
+    #[test]
+    fn parallel_writer_failure_stops_producer() {
+        let directory = tempfile::tempdir().unwrap();
+        let existing = directory.path().join("features.parquet");
+        std::fs::write(&existing, b"keep").unwrap();
+        let samples = Samples {
+            rows: (0..100)
+                .map(|i| (format!("{i:064x}"), Row::new()))
+                .collect(),
+            ..Samples::default()
+        };
+        let schema = extraction_schema();
+        assert!(write_tables(&samples, directory.path(), schema.clone(), schema, 4).is_err());
+        assert_eq!(std::fs::read(existing).unwrap(), b"keep");
+    }
     /// Verify label conflicts and inconsistent duplicate group metadata are rejected.
     #[test]
     fn conflicting_label_is_detected_even_when_second_row_failed() {

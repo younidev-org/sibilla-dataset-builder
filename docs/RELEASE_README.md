@@ -13,7 +13,7 @@ Replace `./samples` with your PDF file or folder. Set `--type` to `benign`, `mal
 ## Build a dataset
 
 ```sh
-./sibilla-b dataset build -i ./features.parquet -o ./dataset --split 70:15:15 --seed 42
+./sibilla-b dataset build -i ./features.parquet -o ./dataset --split 70:15:15 --seed 42 -j 2
 ```
 
 Repeat `-i` to combine tables. Check `dataset/report.json` before using the result. Unknown labels are excluded; related files need meaningful grouping to prevent split leakage.
