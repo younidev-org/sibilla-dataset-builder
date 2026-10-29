@@ -109,8 +109,6 @@ Building from source requires Rust 1.88+ and Cargo. Run commands from the reposi
 | Run Clippy | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
 | Generate safe fixtures | `cargo run -p sibilla-b-pdf --example generate_fixtures -- .local/demo/samples` |
 
-For contributor details, see [architecture](docs/ARCHITECTURE.md) and [CI and releases](docs/RELEASES.md#maintainer-reference).
-
 ## Guides
 
 Choose a guide by task, or browse the complete [documentation hub](docs/README.md):
