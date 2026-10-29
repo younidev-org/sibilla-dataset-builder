@@ -68,3 +68,13 @@ fn timed_out_process_is_killed() {
     assert!(!worker.alive().unwrap());
     assert!(started.elapsed() < std::time::Duration::from_secs(2));
 }
+#[test]
+fn sample_open_rejects_symlink_components() {
+    let directory = tempfile::tempdir().unwrap();
+    let real = directory.path().join("real");
+    std::fs::create_dir(&real).unwrap();
+    std::fs::write(real.join("sample.pdf"), b"safe test bytes").unwrap();
+    std::os::unix::fs::symlink(&real, directory.path().join("alias")).unwrap();
+    assert!(sibilla_core::open_sample(&real.join("sample.pdf")).is_ok());
+    assert!(sibilla_core::open_sample(&directory.path().join("alias/sample.pdf")).is_err());
+}

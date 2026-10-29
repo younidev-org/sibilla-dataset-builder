@@ -13,6 +13,7 @@ use std::{
 #[derive(Default)]
 struct Samples {
     rows: BTreeMap<String, Row>,
+    spool: Option<PathBuf>,
     labels: BTreeMap<String, u64>,
     group_column: Option<String>,
     quarantined: BTreeSet<String>,
@@ -94,9 +95,32 @@ impl Samples {
                 self.duplicates += 1;
             }
         } else {
-            self.rows.insert(id, row);
+            if let Some(directory) = &self.spool {
+                serde_json::to_writer(std::fs::File::create(directory.join(&id))?, &row)?;
+                let mut metadata = BTreeMap::from([("label".to_owned(), row["label"].clone())]);
+                if let Some(column) = &self.group_column {
+                    metadata.insert(
+                        column.clone(),
+                        row.get(column).cloned().unwrap_or(Value::Null),
+                    );
+                }
+                self.rows.insert(id, metadata);
+            } else {
+                self.rows.insert(id, row);
+            }
         }
         Ok(())
+    }
+    fn records(&self) -> impl Iterator<Item = Result<Row>> + '_ {
+        self.rows.iter().map(|(id, row)| {
+            if let Some(directory) = &self.spool {
+                Ok(serde_json::from_reader(std::fs::File::open(
+                    directory.join(id),
+                )?)?)
+            } else {
+                Ok(row.clone())
+            }
+        })
     }
 }
 fn assign(
@@ -176,11 +200,13 @@ pub fn build(
     {
         bail!("unknown group column");
     }
+    let input_spool = tempfile::tempdir()?;
     let mut samples = Samples {
+        spool: Some(input_spool.path().to_owned()),
         group_column: group.map(str::to_owned),
         ..Samples::default()
     };
-    // shortcut: unique feature rows are in memory; replace with external sorting for corpora beyond RAM.
+    // shortcut: identity/group metadata remains in memory; external sorting is needed for million-sample corpora.
     for path in inputs {
         sibilla_output::read(path, schema.clone(), |row| samples.add(row, quarantine))?;
     }
@@ -203,7 +229,7 @@ pub fn build(
     sibilla_output::write(
         &root.join("manifest.parquet"),
         schema.clone(),
-        samples.rows.values().cloned().map(Ok),
+        samples.records(),
     )?;
     let feature_fields: Vec<_> = schema
         .fields()
@@ -219,7 +245,7 @@ pub fn build(
     sibilla_output::write(
         &root.join("features.parquet"),
         Arc::new(Schema::new(feature_fields)),
-        samples.rows.values().cloned().map(Ok),
+        samples.records(),
     )?;
     let split_schema = Arc::new(Schema::new(vec![
         Field::new("sample_id", DataType::Utf8, false),
@@ -244,20 +270,19 @@ pub fn build(
             rows.into_iter().map(Ok),
         )?;
     }
-    let null_counts: BTreeMap<_, _> = schema
+    let mut null_counts: BTreeMap<String, usize> = schema
         .fields()
         .iter()
-        .map(|f| {
-            (
-                f.name().clone(),
-                samples
-                    .rows
-                    .values()
-                    .filter(|r| r.get(f.name()).is_none_or(Value::is_null))
-                    .count(),
-            )
-        })
+        .map(|f| (f.name().clone(), 0))
         .collect();
+    for row in samples.records() {
+        let row = row?;
+        for (name, count) in &mut null_counts {
+            if row.get(name).is_none_or(Value::is_null) {
+                *count += 1;
+            }
+        }
+    }
     let mut class_counts: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
     for (id, row) in &samples.rows {
         *class_counts
@@ -359,6 +384,16 @@ mod tests {
         samples.add(make(1, "failed"), true).unwrap();
         assert!(samples.rows.is_empty());
         assert_eq!(samples.conflicts, 1);
+        let mut samples = Samples {
+            group_column: Some("collection_id".into()),
+            ..Samples::default()
+        };
+        let mut a = make(0, "success");
+        a.insert("collection_id".into(), Value::from("A"));
+        let mut b = make(0, "success");
+        b.insert("collection_id".into(), Value::from("B"));
+        samples.add(a, true).unwrap();
+        assert!(samples.add(b, true).is_err());
     }
     #[test]
     fn groups_never_cross_partitions_and_seed_is_reproducible() {

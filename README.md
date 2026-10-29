@@ -6,7 +6,7 @@ This is a development implementation: see the limitations below.
 
 ## Build
 
-Linux (x86-64 or AArch64), Rust 1.88 or newer:
+Linux 5.6+ (x86-64 or AArch64), Rust 1.88 or newer:
 
 ```sh
 cargo build --release --locked
@@ -29,7 +29,9 @@ sibilla-b benchmark pdf --input ./samples/benchmark --workers 1,2,4
 sibilla-b extract pdf --schema-version
 ```
 
-Input files are opened read-only; symlinks are skipped and nonregular files rejected.
+Input files are opened read-only; symlinks are skipped by default and nonregular files rejected.
+`--follow-symlinks` resolves targets explicitly and detects directory cycles; it can
+include files outside the original tree.
 Directory scanning is recursive unless `--no-recursive` is supplied. Labels come
 only from `--type benign|malicious|unknown` (0, 1, null). Unknown rows remain in
 extraction tables but are excluded from labeled datasets.
@@ -41,7 +43,10 @@ null. A killed process cannot return statistics, so they remain null too.
 
 CSV and Parquet contain the same typed flattened fields, including 256 histogram
 columns. CSV uses `\N` for null and escapes a leading backslash in string values;
-empty strings are preserved. Existing output paths are never overwritten.
+empty strings are preserved. `--format csv|parquet` overrides the file extension;
+table readers recognize Parquet magic. `--failures PATH` writes non-success records
+as a separate atomic JSONL sidecar. Sidecars are published independently before the
+feature table; existing paths are refused. Existing output paths are never overwritten.
 Final extraction tables and dataset directories are published atomically.
 Extraction keeps synchronized per-record checkpoints beside the output in
 `.OUTPUT.checkpoints/`. Resume with the original arguments plus `--resume`;
@@ -60,16 +65,17 @@ rejected. A random split without grouping does not establish family generalizati
 
 ## Current limitations
 
-- Explicit format override, failure sidecars, symlink following and temporal
-  evaluation are rejected explicitly; they are not implemented yet.
+- Temporal evaluation is rejected: this schema has no defensible first-seen timestamps.
 - Byte statistics and initial PDF structural/raw/parsed-name counts work. The full
   specified PDF feature schema is unfinished; `pdf-v1` is not frozen.
-- Paths and unique dataset rows are held in memory. Features are spooled to disk
-  during extraction, but million-file scaling and external sorting are unfinished.
+- Discovery paths and identity/group metadata remain in memory. Full feature rows
+  are spooled to disk in both extraction and dataset construction. Million-file
+  scaling and external sorting are unfinished.
 - Linux worker controls limit address space and descriptors and deny networking;
   they are not full filesystem/kernel isolation. Use a dedicated VM/container.
-- A decompression ceiling applies per stream. Aggregate decompression accounting,
-  recursion controls and stronger sandbox validation remain unfinished.
+- Explicit stream measurements share an aggregate decode budget. Parser-internal
+  expansion is limited per stream and by process memory; stronger sandbox and
+  aggregate parser accounting remain unfinished.
 - Benchmarks measure complete extraction. Peak memory and storage type are not
   automatically measured; record them separately before performance comparisons.
 
@@ -77,3 +83,18 @@ See [schema](docs/FEATURE_SCHEMA.md), [security](SECURITY.md),
 [architecture](docs/ARCHITECTURE.md), [dataset protocol](docs/DATASET_PROTOCOL.md),
 and [implementation progress](docs/IMPLEMENTATION_PLAN.md).
 The optional `.fixtures` corpus is private and is not required by CI.
+
+## Safe demonstration
+
+```sh
+cargo run -p sibilla-pdf --example generate_fixtures -- .local/demo/samples
+sibilla-b extract pdf --input .local/demo/samples --type benign \
+  --output .local/demo/features.parquet --source synthetic-demo \
+  --collection-id safe-generated --workers 2
+sibilla-b dataset build --input .local/demo/features.parquet \
+  --output .local/demo/dataset --group-column collection_id
+```
+
+These three PDFs are generated locally. One shared group deliberately stays in one
+partition; the demonstration is not an evaluation corpus. Outputs must not already
+exist. The example generator checks that its generated PDFs parse to one page.

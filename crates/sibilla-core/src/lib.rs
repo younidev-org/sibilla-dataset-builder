@@ -3,7 +3,6 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sibilla_schema::{Extraction, FormatExtractor, Limits};
 use std::{
-    fs::OpenOptions,
     io::{BufRead, Read, Write},
     path::PathBuf,
 };
@@ -159,6 +158,35 @@ fn set_cpu_budget(seconds: u64) -> Result<()> {
     }
     Ok(())
 }
+/// Reject symlinks in every path component, including during races.
+pub fn open_sample(path: &std::path::Path) -> Result<std::fs::File> {
+    use std::os::{fd::FromRawFd, unix::ffi::OsStrExt};
+    #[repr(C)]
+    struct OpenHow {
+        flags: u64,
+        mode: u64,
+        resolve: u64,
+    }
+    let path = std::ffi::CString::new(path.as_os_str().as_bytes())?;
+    let how = OpenHow {
+        flags: (libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NONBLOCK) as u64,
+        mode: 0,
+        resolve: 0x04,
+    };
+    let fd = unsafe {
+        libc::syscall(
+            libc::SYS_openat2,
+            libc::AT_FDCWD,
+            path.as_ptr(),
+            &how,
+            std::mem::size_of::<OpenHow>(),
+        )
+    };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    Ok(unsafe { std::fs::File::from_raw_fd(fd as i32) })
+}
 fn read_and_extract(job: &Job, extractor: &impl FormatExtractor) -> Extraction {
     let rejected = |code: &str| Extraction {
         common_features: None,
@@ -167,12 +195,7 @@ fn read_and_extract(job: &Job, extractor: &impl FormatExtractor) -> Extraction {
         error_code: Some(code.into()),
     };
     let result = (|| -> Result<Vec<u8>> {
-        use std::os::unix::fs::OpenOptionsExt;
-        let file = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
-            .open(&job.path)
-            .context("open input")?;
+        let file = open_sample(&job.path)?;
         if !file.metadata()?.is_file() {
             bail!("not regular");
         }

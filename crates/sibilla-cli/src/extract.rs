@@ -6,43 +6,76 @@ use std::{
     sync::{Arc, Mutex, mpsc},
     time::Instant,
 };
-fn discover(path: &Path, recursive: bool, files: &mut Vec<PathBuf>, skip: &Path) -> Result<()> {
+fn discover(
+    path: &Path,
+    recursive: bool,
+    files: &mut Vec<PathBuf>,
+    skip: &Path,
+    follow: bool,
+    visited: &mut std::collections::BTreeSet<PathBuf>,
+) -> Result<()> {
     if path == skip {
         return Ok(());
     }
     let metadata = std::fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() {
+        if follow {
+            discover(
+                &std::fs::canonicalize(path)?,
+                recursive,
+                files,
+                skip,
+                follow,
+                visited,
+            )?;
+        }
         return Ok(());
     }
     if metadata.is_file() {
         files.push(path.to_owned());
     } else if metadata.is_dir() {
+        if !visited.insert(std::fs::canonicalize(path)?) {
+            return Ok(());
+        }
         let mut entries = std::fs::read_dir(path)?.collect::<std::io::Result<Vec<_>>>()?;
         entries.sort_by_key(|e| e.file_name());
         for entry in entries {
             let kind = entry.file_type()?;
-            if kind.is_file() || (recursive && kind.is_dir()) {
-                discover(&entry.path(), recursive, files, skip)?;
+            if kind.is_file()
+                || (recursive && kind.is_dir())
+                || (follow && kind.is_symlink() && (recursive || entry.path().is_file()))
+            {
+                discover(&entry.path(), recursive, files, skip, follow, visited)?;
             }
         }
     }
     Ok(())
 }
 pub fn run(args: Extract) -> Result<()> {
-    if args.follow_symlinks || args.format.is_some() || args.failures.is_some() {
-        bail!("symlink traversal, explicit format and failure sidecars are not available yet");
-    }
     if args.workers == 0 || args.workers > 256 || args.timeout_seconds == 0 {
         bail!("workers must be 1..256 and timeout must be positive");
     }
     let input = args.input.context("input required")?;
-    if std::fs::symlink_metadata(&input)?.file_type().is_symlink() {
+    if std::fs::symlink_metadata(&input)?.file_type().is_symlink() && !args.follow_symlinks {
         bail!("input symlinks are not followed");
     }
     let input = std::fs::canonicalize(input)?;
     let output = args.output.context("output required")?;
     if output.exists() {
         bail!("output already exists");
+    }
+    let format = args
+        .format
+        .as_deref()
+        .or_else(|| output.extension().and_then(|e| e.to_str()))
+        .context("output format required")?;
+    if !matches!(format, "csv" | "parquet") {
+        bail!("format must be csv or parquet");
+    }
+    if let Some(failures) = &args.failures
+        && (failures.exists() || destination(failures)? == destination(&output)?)
+    {
+        bail!("failure sidecar already exists or aliases output");
     }
     let limits = Limits {
         max_size_bytes: args
@@ -68,7 +101,14 @@ pub fn run(args: Extract) -> Result<()> {
             .to_string_lossy()
     ));
     let mut files = Vec::new();
-    discover(&input, !args.no_recursive, &mut files, &checkpoint)?;
+    discover(
+        &input,
+        !args.no_recursive,
+        &mut files,
+        &checkpoint,
+        args.follow_symlinks,
+        &mut Default::default(),
+    )?;
     if files.is_empty() {
         bail!("no input files");
     }
@@ -78,7 +118,7 @@ pub fn run(args: Extract) -> Result<()> {
         Label::Malicious => Some(1),
         Label::Unknown => None,
     };
-    let manifest = serde_json::json!({"schema":sibilla_schema::SCHEMA_VERSION,"version":env!("CARGO_PKG_VERSION"),"input":input,"files":files,"limits":limits,"label":label,"source":args.source,"collection_id":args.collection_id,"recursive":!args.no_recursive});
+    let manifest = serde_json::json!({"schema":sibilla_schema::SCHEMA_VERSION,"version":env!("CARGO_PKG_VERSION"),"input":input,"files":files,"limits":limits,"label":label,"source":args.source,"collection_id":args.collection_id,"recursive":!args.no_recursive,"follow_symlinks":args.follow_symlinks,"format":format});
     if !args.resume {
         std::fs::create_dir(&checkpoint).context("checkpoint directory exists; use --resume")?;
     }
@@ -214,6 +254,25 @@ pub fn run(args: Extract) -> Result<()> {
         shards.push((key, index, path));
     }
     shards.sort_by(|a, b| (&a.0, a.1).cmp(&(&b.0, b.1)));
+    if let Some(path) = &args.failures {
+        use std::io::Write;
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        std::fs::create_dir_all(parent)?;
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+        for (_, _, shard) in &shards {
+            let record: Record = serde_json::from_reader(std::fs::File::open(shard)?)?;
+            if !matches!(record.extraction.status, Status::Success) {
+                serde_json::to_writer(temporary.as_file_mut(), &record)?;
+                writeln!(temporary)?;
+            }
+        }
+        temporary.as_file().sync_all()?;
+        temporary.persist_noclobber(path)?;
+        std::fs::File::open(parent)?.sync_all()?;
+    }
     let mut succeeded = 0;
     let mut partial = 0;
     let rows = shards.into_iter().map(|entry| -> Result<_> {
@@ -225,7 +284,7 @@ pub fn run(args: Extract) -> Result<()> {
         }
         sibilla_output::row(&record)
     });
-    sibilla_output::write(&output, sibilla_output::extraction_schema(), rows)?;
+    sibilla_output::write_with_format(&output, sibilla_output::extraction_schema(), rows, format)?;
     if !args.quiet {
         eprintln!(
             "discovered={total} success={succeeded} partial={partial} failed={} elapsed={:.3}s",
@@ -250,7 +309,7 @@ fn atomic_record(path: &Path, value: &impl serde::Serialize) -> Result<()> {
 fn fingerprint(path: &Path, limit: u64) -> Result<String> {
     use sha2::{Digest, Sha256};
     use std::io::Read;
-    let mut file = std::fs::File::open(path)?;
+    let mut file = sibilla_core::open_sample(path)?;
     if !file.metadata()?.is_file() || file.metadata()?.len() > limit {
         bail!("resume input size changed");
     }
@@ -287,4 +346,13 @@ fn checkpoint_lock(path: &Path) -> Result<std::fs::File> {
         bail!("another extraction owns this checkpoint");
     }
     Ok(file)
+}
+
+fn destination(path: &Path) -> Result<PathBuf> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    Ok(std::fs::canonicalize(parent)?.join(path.file_name().context("output filename")?))
 }

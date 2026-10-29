@@ -18,7 +18,7 @@ pub struct CommonFeatures {
     pub printable_ratio: f64,
     pub byte_histogram: Vec<f64>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct PdfFeatures {
     pub header_offset: Option<usize>,
     pub version: Option<String>,
@@ -31,6 +31,38 @@ pub struct PdfFeatures {
     pub encrypted: Option<bool>,
     pub raw_tokens: BTreeMap<String, usize>,
     pub parsed_names: Option<BTreeMap<String, usize>>,
+    pub reference_count: Option<usize>,
+    pub xref_table_count: Option<usize>,
+    pub xref_stream_count: Option<usize>,
+    pub object_stream_count: Option<usize>,
+    pub duplicate_object_ids: Option<usize>,
+    pub inaccessible_objects: Option<usize>,
+    pub embedded_file_count: Option<usize>,
+    pub filespec_count: Option<usize>,
+    pub document_javascript_action_count: Option<usize>,
+    pub catalog_action_reference_count: Option<usize>,
+    pub external_uri_count: Option<usize>,
+    pub external_host_count: Option<usize>,
+    pub suspicious_filter_chain_count: Option<usize>,
+    pub raw_stream_size_mean: Option<f64>,
+    pub raw_stream_size_min: Option<f64>,
+    pub raw_stream_size_max: Option<f64>,
+    pub raw_stream_size_std: Option<f64>,
+    pub decoded_stream_size_mean: Option<f64>,
+    pub decoded_stream_size_min: Option<f64>,
+    pub decoded_stream_size_max: Option<f64>,
+    pub decoded_stream_size_std: Option<f64>,
+    pub filter_depth_mean: Option<f64>,
+    pub filter_depth_min: Option<f64>,
+    pub filter_depth_max: Option<f64>,
+    pub filter_depth_std: Option<f64>,
+    pub high_entropy_stream_ratio: Option<f64>,
+    pub catalog_present: Option<bool>,
+    pub metadata_present: Option<bool>,
+    pub acroform_present: Option<bool>,
+    pub incremental_update_raw_count: usize,
+    pub encoded_name_raw_count: usize,
+    pub filter_counts: Option<BTreeMap<String, usize>>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]

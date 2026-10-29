@@ -12,3 +12,4 @@ anyhow.workspace = true
 sibilla-schema = { path = "../sibilla-schema" }
 lopdf.workspace = true
 sibilla-common-features = { path = "../sibilla-common-features" }
+url = "2"

@@ -1,7 +1,6 @@
 # Implementation plan
 
 Authority: `.local/SIBILLA_DATASET_BUILDER.md` (local specification).
-Executable: `sibilla-b`. No commits or pushes authorized.
 
 1. Foundation: independent workspace crates, typed records, format extractor interface,
    clap commands, documentation and CI. Verify help, schema serialization, fmt, clippy.
@@ -58,3 +57,25 @@ Executable: `sibilla-b`. No commits or pushes authorized.
   pass, as do timeout kill and actual subprocess seccomp network-denial checks.
 - Per-job CPU budgets now supplement supervising wall-clock limits. Dataset JSON
   metadata and report files are synchronized before directory publication.
+
+- Expanded-feature milestone: loaded references/streams, catalog flags, typed embed
+  counts, URI hosts, bounded decoded/raw stream statistics and filter summaries.
+  Unsupported graph/revision measurements are explicitly null and documented.
+- Review regressions fixed: empty-password encryption identity, password-required
+  null semantics, empty-filter identity decoding, nonfinite input rejection.
+- Format override, independent atomic failure JSONL, opt-in symlink traversal/cycle
+  handling and CPU-aware worker default are implemented and tested.
+- Dataset feature rows now spool to disk; only identity/group metadata stays in RAM.
+  File opens reject symlinks in all components using Linux openat2.
+- Generated and verified three safe one-page demo PDFs, extracted their features,
+  and built .local/demo/dataset using a shared group; no real sample is required.
+- Remaining release gaps: temporal inputs, external manifests/sort for million-file
+  scale, advanced action/revision graphs, embedded-only size summaries, full-corpus
+  benchmark/peak memory, cross-platform support and stronger sandbox evaluation.
+- Latest verification: 23 top-level tests pass (plus the isolated network probe),
+  all-target compilation, fmt and clippy pass. Expanded feature extraction on ten
+  local PDFs produced six success and four partial rows in both formats; dataset
+  builds succeeded. Observed debug throughput: 8.30 files/s with one worker and
+  15.46 with two (tiny warm-cache corpus; see docs/benchmark-sample.json).
+- This remains a development implementation, not completion of every original
+  acceptance gate; the remaining release gaps above are explicit.

@@ -56,7 +56,7 @@ struct Extract {
     label: Label,
     #[arg(long, required_unless_present = "schema_version")]
     output: Option<PathBuf>,
-    #[arg(long, default_value_t = 1)]
+    #[arg(long, default_value_t = default_workers())]
     workers: usize,
     #[arg(long, default_value_t = 64)]
     max_size_mb: u64,
@@ -106,6 +106,12 @@ struct Benchmark {
     input: PathBuf,
     #[arg(long, default_value = "1,4,8,12")]
     workers: String,
+}
+fn default_workers() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .min(32)
 }
 fn main() -> Result<()> {
     match Cli::parse().command {

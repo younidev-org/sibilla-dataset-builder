@@ -12,14 +12,17 @@ coordinator threads, each supervising one parser process, and receives results o
 a bounded channel. Records are spooled individually to disk, then ordered by hash
 (with deterministic input order tie-breaks) and streamed into the final table.
 Parquet batches contain at most 512 rows. Output is synchronized and published
-without overwriting existing paths. Current path/shard lists and dataset dedup maps
-still reside in RAM; external manifests/sorting remain required for large corpora.
+without overwriting existing paths. Current path/shard lists and dataset identity/group maps
+still reside in RAM; full feature rows are spooled to disk; external manifests/sorting remain required for large corpora.
 
-The worker opens files without following the final symlink and rejects nonregular
-files. Intermediate path-component races and full filesystem isolation are not
-solved. Worker stderr is suppressed so parser logs cannot expose sample content.
+The worker uses Linux openat2 with RESOLVE_NO_SYMLINKS, rejecting symlinks in all
+path components, and rejects nonregular files. Full filesystem isolation is not
+provided. Explicit symlink following resolves paths during discovery. Worker stderr is suppressed so parser logs cannot expose sample content.
 The protocol returns fixed failure codes rather than parser-supplied error text.
 
 The feature schema is still in development. Do not silently merge artifacts from
 future incompatible schema revisions. Other formats must implement the trait in
 independent crates without coupling their parsers to orchestration or dataset code.
+
+Feature values and record ordering are deterministic across worker counts; observed
+extraction durations and benchmark timings naturally vary.
