@@ -51,7 +51,8 @@ fn discover(
     }
     Ok(())
 }
-pub fn run(args: Extract) -> Result<()> {
+pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
+    let discovery = ui.progress("Discovering files", None);
     if args.workers == 0 || args.workers > 256 || args.timeout_seconds == 0 {
         bail!("workers must be 1..256 and timeout must be positive");
     }
@@ -59,10 +60,14 @@ pub fn run(args: Extract) -> Result<()> {
     if std::fs::symlink_metadata(&input)?.file_type().is_symlink() && !args.follow_symlinks {
         bail!("input symlinks are not followed");
     }
-    let input = std::fs::canonicalize(input)?;
+    let input = std::fs::canonicalize(&input)
+        .with_context(|| format!("cannot read input {}", input.display()))?;
     let output = args.output.context("output required")?;
     if output.exists() {
-        bail!("output already exists");
+        bail!(
+            "output {} already exists; choose a new output path",
+            output.display()
+        );
     }
     let format = args
         .format
@@ -113,6 +118,7 @@ pub fn run(args: Extract) -> Result<()> {
         bail!("no input files");
     }
     let total = files.len();
+    discovery.set_message("Validating checkpoints");
     let label = match args.label {
         Label::Benign => Some(0),
         Label::Malicious => Some(1),
@@ -161,6 +167,9 @@ pub fn run(args: Extract) -> Result<()> {
         }
         pending.push((index, path));
     }
+    discovery.finish_and_clear();
+    let progress = ui.progress("Extracting PDFs", Some(total as u64));
+    progress.set_position(reused as u64);
     // shortcut: paths are held in memory; use a disk discovery manifest for million-file corpora.
     let jobs = Arc::new(Mutex::new(pending.into_iter()));
     let executable = std::env::current_exe()?;
@@ -234,18 +243,15 @@ pub fn run(args: Extract) -> Result<()> {
             };
             atomic_record(&checkpoint.join(format!("{index:020}.json")), &record)?;
             completed += 1;
-            if !args.quiet && (completed % 100 == 0 || completed == total) {
-                eprintln!(
-                    "completed {completed}/{total}; {:.1} files/s",
-                    completed as f64 / started.elapsed().as_secs_f64()
-                );
-            }
+            progress.set_position(completed as u64);
         }
         if completed != total {
             bail!("worker results missing");
         }
         Ok(())
     })?;
+    progress.finish_and_clear();
+    let finalizing = ui.progress("Sorting and writing feature table", None);
     let mut shards = Vec::with_capacity(total);
     for index in 0..total {
         let path = checkpoint.join(format!("{index:020}.json"));
@@ -285,12 +291,13 @@ pub fn run(args: Extract) -> Result<()> {
         sibilla_output::row(&record)
     });
     sibilla_output::write_with_format(&output, sibilla_output::extraction_schema(), rows, format)?;
-    if !args.quiet {
-        eprintln!(
+    finalizing.finish_and_clear();
+    if !ui.quiet {
+        ui.success(&format!(
             "discovered={total} success={succeeded} partial={partial} failed={} elapsed={:.3}s",
             total - succeeded - partial,
             started.elapsed().as_secs_f64()
-        );
+        ));
     }
     Ok(())
 }

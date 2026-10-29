@@ -10,7 +10,7 @@ Linux 5.6+ (x86-64 or AArch64), Rust 1.88 or newer:
 
 ```sh
 cargo build --release --locked
-cargo test --workspace --locked
+cargo nextest run --workspace --all-targets --locked
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 ```
@@ -98,3 +98,14 @@ sibilla-b dataset build --input .local/demo/features.parquet \
 These three PDFs are generated locally. One shared group deliberately stays in one
 partition; the demonstration is not an evaluation corpus. Outputs must not already
 exist. The example generator checks that its generated PDFs parse to one page.
+
+## Terminal output
+
+Color is enabled by default. Use `sibilla-b --color never ...` or
+`sibilla-b ... --no-color` to disable it; `--color auto` detects terminals.
+`NO_COLOR=1` disables default colors; an explicit `--color` overrides it.
+Progress bars/spinners use stderr on terminals and are hidden in pipes.
+`-q` / `--quiet` suppresses progress and status; errors remain visible.
+Benchmark JSON and schema-version stdout stay machine readable.
+Use `-i` / `-o` for input/output and `-j` for extraction workers.
+Install nextest if needed with `cargo install cargo-nextest --locked`.

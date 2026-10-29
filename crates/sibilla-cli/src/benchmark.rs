@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use serde_json::json;
 use std::{process::Command, time::Instant};
-pub fn run(args: crate::Benchmark) -> Result<()> {
+pub fn run(args: crate::Benchmark, ui: &crate::ui::Ui) -> Result<()> {
     let counts = args
         .workers
         .split(',')
@@ -10,9 +10,14 @@ pub fn run(args: crate::Benchmark) -> Result<()> {
     if counts.is_empty() || counts.iter().any(|&n| n == 0 || n > 256) {
         bail!("workers must be comma-separated values in 1..256");
     }
+    let progress = ui.progress(
+        "Benchmarking worker configurations",
+        Some(counts.len() as u64),
+    );
     let directory = tempfile::tempdir()?;
     let mut measurements = Vec::new();
     for (index, workers) in counts.into_iter().enumerate() {
+        progress.set_message(format!("Benchmarking {workers} worker(s)"));
         let output = directory.path().join(format!("benchmark-{index}.parquet"));
         let start = Instant::now();
         let status = Command::new(std::env::current_exe()?)
@@ -22,6 +27,8 @@ pub fn run(args: crate::Benchmark) -> Result<()> {
             .arg(&output)
             .arg("--workers")
             .arg(workers.to_string())
+            .arg("--color")
+            .arg(if ui.color { "always" } else { "never" })
             .arg("--quiet")
             .status()?;
         if !status.success() {
@@ -46,8 +53,10 @@ pub fn run(args: crate::Benchmark) -> Result<()> {
             }
             Ok(())
         })?;
+        progress.inc(1);
         measurements.push(json!({"workers":workers,"records":records,"non_success":failed,"bytes_with_statistics":bytes,"elapsed_seconds":elapsed,"files_per_second":records as f64/elapsed,"mib_per_second":bytes as f64/1048576.0/elapsed}));
     }
+    progress.finish_and_clear();
     println!(
         "{}",
         serde_json::to_string_pretty(

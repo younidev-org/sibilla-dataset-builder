@@ -79,3 +79,16 @@ Authority: `.local/SIBILLA_DATASET_BUILDER.md` (local specification).
   15.46 with two (tiny warm-cache corpus; see docs/benchmark-sample.json).
 - This remains a development implementation, not completion of every original
   acceptance gate; the remaining release gaps above are explicit.
+
+## CLI presentation and nextest milestone
+
+- Tests now run with cargo nextest locally and in CI (nextest was already installed).
+- Global --color always|auto|never (always default), --no-color and NO_COLOR handling
+  cover help, errors, status, progress and benchmark subprocesses.
+- Global -q/--quiet, -i/-o/-j shortcuts, command descriptions, option help and examples.
+- Terminal-only stderr spinners/bars cover discovery, checkpoint verification,
+  extraction, finalization, dataset assembly and benchmark configurations.
+- Verified 26 tests with nextest; one isolated restriction probe is intentionally
+  ignored by the harness and executed by its parent subprocess test. Clippy/fmt pass.
+- Pseudo-terminal checks verified bars with and without color and clean stdout.
+  Independent code review found no actionable issues. No full-corpus benchmark rerun.
