@@ -1,0 +1,32 @@
+[package]
+name = "sibilla-b-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+sibilla-b-schema = { path = "../sibilla-b-schema" }
+clap.workspace = true
+
+sibilla-b-core = { path = "../sibilla-b-core" }
+sibilla-b-pdf = { path = "../sibilla-b-pdf" }
+
+sibilla-b-output = { path = "../sibilla-b-output" }
+tempfile = "3"
+
+sibilla-b-dataset = { path = "../sibilla-b-dataset" }
+
+sha2.workspace = true
+
+libc = "0.2"
+
+indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
+console = "0.16"
+
+[[bin]]
+name = "sibilla-b"
+path = "src/main.rs"

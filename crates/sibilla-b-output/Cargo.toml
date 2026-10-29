@@ -1,0 +1,18 @@
+[package]
+name = "sibilla-b-output"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+sibilla-b-schema = { path = "../sibilla-b-schema" }
+csv = "1"
+arrow-array = "60"
+arrow-schema = "60"
+parquet = { version = "60", default-features = false, features = ["arrow"] }
+tempfile = "3"
+sibilla-b-common-features = { path = "../sibilla-b-common-features" }

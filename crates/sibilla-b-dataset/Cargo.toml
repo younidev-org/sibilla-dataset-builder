@@ -1,0 +1,17 @@
+[package]
+name = "sibilla-b-dataset"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+sibilla-b-schema = { path = "../sibilla-b-schema" }
+sibilla-b-output = { path = "../sibilla-b-output" }
+arrow-schema = "60"
+sha2.workspace = true
+tempfile = "3"
+libc = "0.2"
