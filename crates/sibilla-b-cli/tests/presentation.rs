@@ -70,3 +70,38 @@ fn quiet_extraction_keeps_both_streams_clean() {
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
 }
+/// Verify root help explains input, output and worker shortcuts without requiring nested help.
+#[test]
+fn root_help_explains_example_shortcuts() {
+    let output = cli(&["--no-color", "--help"]);
+    let text = String::from_utf8(output.stdout).unwrap();
+    for description in [
+        "-i, --input",
+        "-o, --output",
+        "-j, --workers",
+        "PDF file or folder",
+        "New output file or dataset directory",
+        "extract pdf --help",
+    ] {
+        assert!(text.contains(description), "Missing help: {description}");
+    }
+}
+/// Verify extraction help explains output extensions and provides practical examples.
+#[test]
+fn extraction_help_explains_output_format() {
+    let output = cli(&["--no-color", "extract", "pdf", "--help"]);
+    let text = String::from_utf8(output.stdout).unwrap();
+    for expected in [
+        "Output format:",
+        ".parquet",
+        ".csv",
+        "--format parquet",
+        "--resume",
+        "Examples:",
+    ] {
+        assert!(
+            text.contains(expected),
+            "Missing extraction help: {expected}"
+        );
+    }
+}

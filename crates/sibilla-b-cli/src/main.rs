@@ -10,7 +10,7 @@ use std::path::PathBuf;
     version,
     about = "Extract static PDF features and build reproducible datasets offline",
     arg_required_else_help = true,
-    after_help = "Examples:\n  sibilla-b extract pdf -i samples -o features.parquet --type benign\n  sibilla-b dataset build -i features.parquet -o datasets/pdf-v1\n  sibilla-b benchmark pdf -i samples --workers 1,2,4\n  sibilla-b --color never extract pdf --help"
+    after_help = "Command options used below:\n  -i, --input PATH    PDF file or folder for extraction; feature table for dataset build\n  -o, --output PATH   New output file or dataset directory (existing paths are refused)\n                     Extraction: use .parquet or .csv, or pass --format\n  -j, --workers N     Parallel extraction workers\n  --type LABEL       benign, malicious, or unknown (default: unknown)\n\nFull command options:\n  sibilla-b extract pdf --help\n  sibilla-b dataset build --help\n  sibilla-b benchmark pdf --help\n\nExamples:\n  sibilla-b extract pdf -i samples -o features.parquet --type benign\n  sibilla-b dataset build -i features.parquet -o datasets/pdf-v1\n  sibilla-b benchmark pdf -i samples --workers 1,2,4\n  sibilla-b --color never extract pdf --help"
 )]
 struct Cli {
     /// Color output: enabled by default; auto detects terminals
@@ -48,6 +48,9 @@ enum Command {
 #[derive(Subcommand)]
 enum Format {
     /// Extract PDF byte, structural and active-content indicators
+    #[command(
+        after_help = "Output format:\n  Use an output ending in .parquet or .csv.\n  For a filename without an extension, pass --format parquet or --format csv.\n  Input files are read-only. Output paths must be new.\n\nExamples:\n  sibilla-b extract pdf -i sample.pdf -o features.parquet\n  sibilla-b extract pdf -i benign_pdf_candidates --type benign -o benign_pdf_output.parquet\n  sibilla-b extract pdf -i samples -o features.csv -j 4\n  sibilla-b extract pdf -i samples -o features.parquet --resume"
+    )]
     Pdf(Extract),
 }
 #[derive(Subcommand)]
@@ -74,7 +77,7 @@ struct Extract {
     /// Explicit label; never inferred from paths or content
     #[arg(long = "type", value_enum, default_value = "unknown")]
     label: Label,
-    /// Output .csv or .parquet file; existing paths are refused
+    /// New .csv or .parquet file (or set --format); existing paths are refused
     #[arg(short = 'o', long, required_unless_present = "schema_version")]
     output: Option<PathBuf>,
     /// Parallel parser processes (1–256)
@@ -110,7 +113,7 @@ struct Extract {
     /// Print schema version without extracting files
     #[arg(long)]
     schema_version: bool,
-    /// Override output extension
+    /// Choose csv or parquet explicitly; required if output has no recognized extension
     #[arg(long,value_parser=["csv","parquet"])]
     format: Option<String>,
 }
