@@ -5,12 +5,20 @@
 ## Use a packaged CLI
 
 1. Open [project releases](https://github.com/younidev-org/sibilla-dataset-builder/releases).
-2. If a published release is available, download its CLI archive and `SHA256SUMS`.
-3. Verify the archive checksum, then extract it.
-4. Run the included `sibilla-b` executable; start with `sibilla-b --help`.
+2. Download `sibilla-b` directly, or choose the tar archive for the bundled usage guide and license.
+3. Download `SHA256SUMS` and verify the checksum for your chosen asset.
+4. For the archive, extract it. For the standalone download, enable executable permissions:
+
+```sh
+chmod +x sibilla-b
+./sibilla-b --help
+```
+
+Both downloads are available only after a release is published.
 
 | Item | What to expect |
 | --- | --- |
+| Standalone download | `sibilla-b`; no extraction required |
 | Archive name | `sibilla-b-VERSION-x86_64-unknown-linux-gnu.tar.gz` |
 | Target | Linux x86-64 GNU, built on Ubuntu 24.04 |
 | Contents | Only `sibilla-b`, a short usage `README.md`, and `LICENSE` |
@@ -30,7 +38,7 @@ A configured release workflow does not guarantee a published release exists. Dra
 | Version gate | Tag must equal `v` plus workspace version; currently `v0.1.0` |
 | Commit gate | Tag must point to `main` HEAD |
 | Qualification | Formatting, Clippy, nextest, optimized CLI build |
-| Artifacts | CLI archive and `SHA256SUMS` |
+| Artifacts | Standalone `sibilla-b`, CLI archive, and `SHA256SUMS` |
 | Publication | Draft GitHub release with generated notes |
 | Manual trigger | Not available |
 | Branch pushes or pull requests | Do not create releases |
