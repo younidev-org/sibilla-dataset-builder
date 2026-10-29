@@ -83,7 +83,17 @@ sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv
 
 Open `./datasets/pdf-v1/report.json` to check counts and exclusions. Use `--group-column` when your tables contain meaningful related-file groups.
 
-### 3. Adjust a run
+### 3. Inspect the result
+
+```sh
+sibilla-b inspect ./features/benign.parquet
+sibilla-b inspect ./features/benign.parquet --columns
+sibilla-b inspect ./features/benign.parquet --json
+```
+
+Inspection reads every row, reporting labels, statuses, error reasons, missing values, and up to five sample errors. `--columns` maps shorter display names to the unchanged exported names.
+
+### 4. Adjust a run
 
 | I want to… | Add this option |
 | --- | --- |

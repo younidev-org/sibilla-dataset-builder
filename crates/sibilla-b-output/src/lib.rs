@@ -61,7 +61,21 @@ pub fn row(record: &Record) -> Result<Row> {
         Some("size_limit" | "input_read_failed") => Some("read"),
         Some("invalid_magic") => Some("format"),
         Some("pdf_parse_failed" | "pdf_password_required") => Some("parse"),
-        Some("stream_measurement_unavailable") => Some("features"),
+        Some(code)
+            if code == "stream_measurement_unavailable"
+                || code.split('|').all(|c| {
+                    matches!(
+                        c,
+                        "invalid_filter_chain"
+                            | "unsupported_stream_filter"
+                            | "decode_budget_exceeded"
+                            | "malformed_stream"
+                            | "feature_depth_limit"
+                    )
+                }) =>
+        {
+            Some("features")
+        }
         Some("worker_timeout" | "worker_crash") => Some("worker"),
         _ => None,
     };

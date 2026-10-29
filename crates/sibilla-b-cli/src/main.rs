@@ -1,5 +1,7 @@
 mod benchmark;
 mod extract;
+mod inspect;
+mod interrupt;
 mod ui;
 use anyhow::{Result, bail};
 use clap::{Args, ColorChoice, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
@@ -27,6 +29,17 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Inspect every row of an extraction table, including partial reasons and missing values
+    Inspect {
+        /// CSV or Parquet extraction table
+        input: PathBuf,
+        /// Print a machine-readable summary
+        #[arg(long)]
+        json: bool,
+        /// Show readable column names alongside their exported names
+        #[arg(long)]
+        columns: bool,
+    },
     #[command(hide = true)]
     Worker,
     /// Extract versioned feature tables from files or directories
@@ -178,13 +191,22 @@ fn main() -> std::process::ExitCode {
                 "{} {error:#}",
                 console::style("error:").red().bold().for_stderr()
             );
-            std::process::ExitCode::FAILURE
+            if error.is::<interrupt::Interrupted>() {
+                std::process::ExitCode::from(130)
+            } else {
+                std::process::ExitCode::FAILURE
+            }
         }
     }
 }
 /// Dispatch the selected CLI command without contaminating machine-readable stdout.
 fn run(cli: Cli, ui: &ui::Ui) -> Result<()> {
     match cli.command {
+        Command::Inspect {
+            input,
+            json,
+            columns,
+        } => inspect::run(&input, json, columns)?,
         Command::Worker => sibilla_b_core::worker_loop(sibilla_b_pdf::PdfExtractor)?,
         Command::Extract {
             format: Format::Pdf(args),

@@ -38,7 +38,9 @@ Input files are opened read-only. Labels are never inferred. Symlinks are skippe
 
 ## Resume an interrupted run
 
-Repeat the original extraction command and add `--resume`:
+During extraction, Ctrl+C stops new jobs, checkpoints in-flight results, and exits with code 130. Resume from the same working directory using the shell-quoted command printed to stderr. If a failure sidecar was already published, the printed command omits that existing sidecar.
+
+Or repeat the original extraction command and add `--resume`:
 
 ```sh
 sibilla-b extract pdf -i ./samples/benign --type benign \
@@ -53,6 +55,31 @@ sibilla-b extract pdf -i ./samples/benign --type benign \
 - A checkpoint cannot be shared by simultaneous runs.
 
 Existing final outputs are never overwritten. After a completed run, choose a new output path for another extraction. Checkpoints remain after success; remove them when no longer needed.
+
+## Inspect a feature table
+
+```sh
+sibilla-b inspect ./features/benign.parquet
+sibilla-b inspect ./features/benign.parquet --columns
+sibilla-b inspect ./features/benign.parquet --json
+```
+
+- Reads every row of a CSV or Parquet extraction table, not a preview.
+- Reports labels, statuses, error counts, missing values, and up to five sample errors.
+- Uses shorter display names; `--columns` shows their exported equivalents.
+- `--json` outputs the complete summary for scripts.
+
+| Partial reason | Meaning |
+| --- | --- |
+| `unsupported_stream_filter` | The decoder does not support a stream's filter |
+| `decode_budget_exceeded` | A decoded stream would exceed the remaining budget |
+| `malformed_stream` | A supported decoder could not decode the stream |
+| `invalid_filter_chain` | The stream's filter declaration is malformed |
+| `feature_depth_limit` | A feature traversal reached its nesting limit |
+
+Multiple reasons are stored in sorted `|`-separated form and counted separately. Older tables retain their original generic codes; run a new extraction to obtain the detailed reasons.
+
+The final extraction summary separates rejected files, timeouts and crashes, and reports reused records, files/second, and error counts.
 
 ## Find extraction problems
 

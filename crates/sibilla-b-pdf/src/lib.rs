@@ -117,7 +117,7 @@ impl FormatExtractor for PdfExtractor {
                 (Status::Partial, Some("pdf_password_required".into()))
             }
             Ok(doc) => {
-                let mut measurements_complete = measurements(&doc, &mut features, limits);
+                let mut reasons = measurements(&doc, &mut features, limits);
                 features.encrypted = Some(doc.is_encrypted() || doc.was_encrypted());
                 features.page_count = Some(doc.get_pages().len());
                 features.object_count = Some(doc.objects.len());
@@ -135,14 +135,14 @@ impl FormatExtractor for PdfExtractor {
                 {
                     features.parsed_names = Some(counts);
                 } else {
-                    measurements_complete = false;
+                    reasons.insert("feature_depth_limit");
                 }
-                if measurements_complete {
+                if reasons.is_empty() {
                     (Status::Success, None)
                 } else {
                     (
                         Status::Partial,
-                        Some("stream_measurement_unavailable".into()),
+                        Some(reasons.into_iter().collect::<Vec<_>>().join("|")),
                     )
                 }
             }
@@ -217,7 +217,11 @@ fn uris(object: &Object, depth: usize, urls: &mut Vec<String>) -> bool {
     }
 }
 /// Populate available semantic and bounded stream measurements.
-fn measurements(doc: &Document, features: &mut PdfFeatures, limits: Limits) -> bool {
+fn measurements(
+    doc: &Document,
+    features: &mut PdfFeatures,
+    limits: Limits,
+) -> std::collections::BTreeSet<&'static str> {
     let catalog = doc.catalog().ok();
     features.catalog_present = Some(catalog.is_some());
     features.metadata_present = catalog.map(|c| c.has(b"Metadata"));
@@ -240,7 +244,7 @@ fn measurements(doc: &Document, features: &mut PdfFeatures, limits: Limits) -> b
     let mut decoded = Vec::new();
     let mut depths = Vec::new();
     let mut remaining = limits.max_decompressed_bytes.min(usize::MAX as u64) as usize;
-    let mut complete = true;
+    let mut reasons = std::collections::BTreeSet::new();
     let mut high_entropy = 0;
     let mut filters: BTreeMap<String, usize> = [
         "ASCIIHexDecode",
@@ -278,7 +282,9 @@ fn measurements(doc: &Document, features: &mut PdfFeatures, limits: Limits) -> b
                         *filters.get_mut(key).expect("filter schema") += 1;
                     }
                 }
-                Err(_) => complete = false,
+                Err(_) => {
+                    reasons.insert("invalid_filter_chain");
+                }
             }
             let identity =
                 !stream.dict.has(b"Filter") || stream.filters().is_ok_and(|chain| chain.is_empty());
@@ -286,8 +292,8 @@ fn measurements(doc: &Document, features: &mut PdfFeatures, limits: Limits) -> b
                 if stream.content.len() <= remaining {
                     Ok(stream.content.clone())
                 } else {
-                    Err(lopdf::Error::Syntax(
-                        "stream exceeds remaining budget".into(),
+                    Err(lopdf::Error::Decompress(
+                        lopdf::DecompressError::MemoryLimitExceeded { limit: remaining },
                     ))
                 }
             } else {
@@ -301,7 +307,20 @@ fn measurements(doc: &Document, features: &mut PdfFeatures, limits: Limits) -> b
                         high_entropy += 1;
                     }
                 }
-                _ => complete = false,
+                Err(lopdf::Error::Unimplemented(_)) => {
+                    reasons.insert("unsupported_stream_filter");
+                }
+                Err(lopdf::Error::Decompress(lopdf::DecompressError::MemoryLimitExceeded {
+                    ..
+                })) => {
+                    reasons.insert("decode_budget_exceeded");
+                }
+                Ok(_) => {
+                    reasons.insert("decode_budget_exceeded");
+                }
+                Err(_) => {
+                    reasons.insert("malformed_stream");
+                }
             }
         }
     }
@@ -337,12 +356,46 @@ fn measurements(doc: &Document, features: &mut PdfFeatures, limits: Limits) -> b
             .collect();
         features.external_host_count = Some(hosts.len());
     }
-    complete
+    if features.reference_count.is_none() || features.external_uri_count.is_none() {
+        reasons.insert("feature_depth_limit");
+    }
+    reasons
 }
 
 #[cfg(test)]
 mod tests {
     use sibilla_b_schema::{FormatExtractor, Limits, Status};
+    /// Verify unsupported filters, malformed streams and budget exhaustion have distinct reasons.
+    #[test]
+    fn measurement_failure_reasons_are_specific() {
+        for (filter, bytes, limit, expected) in [
+            (
+                "DCTDecode",
+                vec![1, 2, 3],
+                1024,
+                "unsupported_stream_filter",
+            ),
+            ("BrotliDecode", vec![255, 255], 1024, "malformed_stream"),
+            ("", vec![1; 32], 1, "decode_budget_exceeded"),
+        ] {
+            let mut doc = lopdf::Document::new();
+            let mut dict = lopdf::Dictionary::new();
+            if !filter.is_empty() {
+                dict.set("Filter", lopdf::Object::Name(filter.as_bytes().to_vec()));
+            }
+            doc.add_object(lopdf::Stream::new(dict, bytes));
+            let mut features = sibilla_b_schema::PdfFeatures::default();
+            let reasons = super::measurements(
+                &doc,
+                &mut features,
+                Limits {
+                    max_decompressed_bytes: limit,
+                    ..Limits::default()
+                },
+            );
+            assert!(reasons.contains(expected), "{reasons:?}");
+        }
+    }
     /// Verify that an empty filter array preserves decoded stream bytes.
     #[test]
     fn empty_filter_array_is_identity() {
@@ -352,7 +405,7 @@ mod tests {
             vec![42; 5],
         ));
         let mut features = sibilla_b_schema::PdfFeatures::default();
-        assert!(super::measurements(&doc, &mut features, Limits::default()));
+        assert!(super::measurements(&doc, &mut features, Limits::default()).is_empty());
         assert_eq!(features.decoded_stream_size_mean, Some(5.0));
     }
     /// Verify encryption identity and null semantics for password-protected pages.

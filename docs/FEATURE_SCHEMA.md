@@ -26,6 +26,8 @@ Unavailable measurements stay null. Do not replace them with zero without an exp
 | Unsupported filter or decode budget exceeded | Decoded statistics null; extraction marked partial |
 | Worker killed | Statistics may be unavailable and remain null |
 
+Error codes may contain multiple fixed reasons separated by `|`. `sibilla-b inspect FILE` counts each reason separately; exported column names remain unchanged.
+
 ## Choose feature groups
 
 | Group | Includes |

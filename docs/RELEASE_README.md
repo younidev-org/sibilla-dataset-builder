@@ -18,6 +18,15 @@ Replace `./samples` with your PDF file or folder. Set `--type` to `benign`, `mal
 
 Repeat `-i` to combine tables. Check `dataset/report.json` before using the result. Unknown labels are excluded; related files need meaningful grouping to prevent split leakage.
 
+## Inspect the result
+
+```sh
+./sibilla-b inspect ./features.parquet
+./sibilla-b inspect ./features.parquet --json
+```
+
+Shows full row counts, labels, statuses, error reasons and missing measurements. Use `--columns` for readable column names.
+
 ## Useful options
 
 | Task | Option |

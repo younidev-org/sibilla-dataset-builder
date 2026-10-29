@@ -146,9 +146,11 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
     } else {
         atomic_record(&checkpoint.join("manifest.json"), &manifest)?;
     }
+    crate::interrupt::install()?;
     let mut pending = Vec::new();
     let mut reused = 0;
     for (index, path) in files.into_iter().enumerate() {
+        crate::interrupt::check()?;
         let shard = checkpoint.join(format!("{index:020}.json"));
         if args.resume && shard.exists() {
             let record: Record = serde_json::from_reader(std::fs::File::open(&shard)?)?;
@@ -190,6 +192,9 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
             scope.spawn(move || {
                 let mut worker = None;
                 loop {
+                    if crate::interrupt::requested() {
+                        break;
+                    }
                     let next = jobs.lock().expect("job mutex").next();
                     let Some((index, path)) = next else {
                         break;
@@ -247,6 +252,14 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
             completed += 1;
             progress.set_position(completed as u64);
         }
+        if crate::interrupt::requested() {
+            progress.finish_and_clear();
+            eprintln!(
+                "Checkpointed {completed}/{total}. Resume from the same directory:\n{}",
+                crate::interrupt::resume_command()
+            );
+            return Err(crate::interrupt::Interrupted.into());
+        }
         if completed != total {
             bail!("worker results missing");
         }
@@ -256,12 +269,14 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
     let finalizing = ui.progress("Sorting and writing feature table", None);
     let mut shards = Vec::with_capacity(total);
     for index in 0..total {
+        crate::interrupt::check()?;
         let path = checkpoint.join(format!("{index:020}.json"));
         let record: Record = serde_json::from_reader(std::fs::File::open(&path)?)?;
         let key = record.sample_id.unwrap_or_else(|| format!("~{index:020}"));
         shards.push((key, index, path));
     }
     shards.sort_by(|a, b| (&a.0, a.1).cmp(&(&b.0, b.1)));
+    crate::interrupt::check()?;
     if let Some(path) = &args.failures {
         use std::io::Write;
         let parent = path
@@ -271,6 +286,7 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
         std::fs::create_dir_all(parent)?;
         let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
         for (_, _, shard) in &shards {
+            crate::interrupt::check()?;
             let record: Record = serde_json::from_reader(std::fs::File::open(shard)?)?;
             if !matches!(record.extraction.status, Status::Success) {
                 serde_json::to_writer(temporary.as_file_mut(), &record)?;
@@ -278,17 +294,30 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
             }
         }
         temporary.as_file().sync_all()?;
+        crate::interrupt::check()?;
         temporary.persist_noclobber(path)?;
         std::fs::File::open(parent)?.sync_all()?;
     }
     let mut succeeded = 0;
     let mut partial = 0;
+    let mut failed = 0;
+    let mut rejected = 0;
+    let mut timeouts = 0;
+    let mut reasons = std::collections::BTreeMap::<String, usize>::new();
     let rows = shards.into_iter().map(|entry| -> Result<_> {
+        crate::interrupt::check()?;
         let record: Record = serde_json::from_reader(std::fs::File::open(entry.2)?)?;
         match record.extraction.status {
             Status::Success => succeeded += 1,
             Status::Partial => partial += 1,
-            _ => {}
+            Status::Rejected => rejected += 1,
+            Status::Timeout => timeouts += 1,
+            Status::Failed => failed += 1,
+        }
+        if let Some(code) = &record.extraction.error_code {
+            for reason in code.split('|') {
+                *reasons.entry(reason.into()).or_default() += 1;
+            }
         }
         sibilla_b_output::row(&record)
     });
@@ -301,10 +330,15 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
     finalizing.finish_and_clear();
     if !ui.quiet {
         ui.success(&format!(
-            "discovered={total} success={succeeded} partial={partial} failed={} elapsed={:.3}s",
-            total - succeeded - partial,
-            started.elapsed().as_secs_f64()
+            "discovered={total} success={succeeded} partial={partial} rejected={rejected} timeout={timeouts} failed={failed} reused={reused} elapsed={:.3}s rate={:.1} files/s",
+            started.elapsed().as_secs_f64(),
+            (total-reused) as f64 / started.elapsed().as_secs_f64()
         ));
+    }
+    if !ui.quiet {
+        for (reason, count) in reasons {
+            eprintln!("  {reason}: {count}");
+        }
     }
     Ok(())
 }
