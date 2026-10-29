@@ -59,8 +59,8 @@ jobs:
           package="sibilla-b-$RELEASE_TAG-$host"
           mkdir -p "release-package/$package" release-assets
           install -m 755 target/release/sibilla-b "release-package/$package/sibilla-b"
-          cp README.md LICENSE SECURITY.md "release-package/$package/"
-          cp -r docs "release-package/$package/"
+          cp LICENSE "release-package/$package/"
+          cp docs/RELEASE_README.md "release-package/$package/README.md"
           tar -czf "release-assets/$package.tar.gz" -C release-package "$package"
           cd release-assets
           sha256sum *.tar.gz > SHA256SUMS

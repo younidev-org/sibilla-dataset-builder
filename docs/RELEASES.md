@@ -13,9 +13,11 @@
 | --- | --- |
 | Archive name | `sibilla-b-VERSION-x86_64-unknown-linux-gnu.tar.gz` |
 | Target | Linux x86-64 GNU, built on Ubuntu 24.04 |
-| Contents | Executable, README, license, security guide, documentation |
+| Contents | Only `sibilla-b`, a short usage `README.md`, and `LICENSE` |
 | Permissions | Executable bit preserved in the archive |
 | Other supported Linux systems | [Build from source](../README.md#development) |
+
+The [bundled README](RELEASE_README.md) contains offline examples and essential safety notes. Full reference documentation stays online; architecture, artwork, benchmarks, and maintainer files are excluded.
 
 A configured release workflow does not guarantee a published release exists. Drafts require maintainer review and publication.
 
