@@ -23,7 +23,7 @@ Unavailable measurements stay null. Do not replace them with zero without an exp
 | Oversized file | No invented byte statistics |
 | Password required | `encrypted=true`; byte/raw features preserved; semantic fields null |
 | Empty-password encryption | Still flagged as encrypted after decryption |
-| Unsupported filter or decode budget exceeded | Decoded statistics null; extraction marked partial |
+| Unsupported filter or decode budget exceeded in decoded mode | Full decoded statistics null; subset statistics and coverage remain available; extraction marked partial |
 | Worker killed | Statistics may be unavailable and remain null |
 
 Error codes may contain multiple fixed reasons separated by a pipe. `sibilla-b inspect FILE` counts each reason separately; exported column names remain unchanged.
@@ -72,7 +72,7 @@ CSV and Parquet preserve the same typed values, including empty strings. Readers
 
 ## Know which measurements are limited
 
-- Stream statistics include every loaded stream, including XRef streams.
+- Full stream statistics cover every loaded stream, including XRef streams. `supported_decoded_stream_size_*` covers only successfully decoded streams.
 - Missing or empty filter chains mean identity decoding.
 - Explicit decoding shares one aggregate measurement budget across streams.
 - Parser-internal decompression is limited per stream; worker memory adds another ceiling.

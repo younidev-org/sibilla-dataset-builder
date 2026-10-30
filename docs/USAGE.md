@@ -29,12 +29,28 @@ sibilla-b extract pdf -i ./sample.pdf --type unknown -o ./features/sample.csv
 | `--type malicious` | Set label `1` |
 | `--type unknown` | Leave the label null |
 | `-j`, `--workers` | Set the number of parser processes |
+| `--stream-mode structural` | Skip optional stream decoding |
+| `--stream-mode decoded` | Attempt bounded decoding (default) |
 | `--no-recursive` | Skip subdirectories |
 | `--follow-symlinks` | Follow resolved targets, including those outside the input tree |
 | `--format csv` | Override the output filename extension |
 | `--source`, `--collection-id` | Save provenance, not predictive features |
 
 Input files are opened read-only. Labels are never inferred. Symlinks are skipped unless you opt in; nonregular files are rejected.
+
+### Choose stream measurements
+
+```sh
+sibilla-b extract pdf -i ./samples --type benign -o ./structural.parquet --stream-mode structural
+sibilla-b extract pdf -i ./samples --type benign -o ./decoded.parquet --stream-mode decoded
+```
+
+`decoded` is the default: attempt bounded decoding and report incomplete coverage as partial.
+`structural` collects byte features, PDF structure, raw stream sizes and filter declarations without decoding streams for optional measurements. The parser may still decode streams needed to read PDF objects.
+Unsupported image codecs do not cause partial status in structural mode; malformed structure can still do so.
+
+Check `stream_decode_status`, coverage and counts before interpreting decoded measurements.
+New extractions use `pdf-v2`. Re-extract old `pdf-v1` inputs to build with this version; use one stream mode across all inputs. Existing checkpoint configurations cannot be reused across schemas or modes.
 
 ## Resume an interrupted run
 
@@ -47,7 +63,7 @@ sibilla-b extract pdf -i ./samples/benign --type benign \
   -o ./features/benign.parquet -j 4 --resume
 ```
 
-- Keep the input, output, label, and provenance arguments unchanged.
+- Keep the input, output, label, stream mode, limits, and provenance arguments unchanged.
 - You may change the worker count.
 - Keep the `.OUTPUT.checkpoints/` directory beside the output.
 - Changed source hashes or configuration stop the resume.
@@ -65,7 +81,7 @@ sibilla-b inspect ./features/benign.parquet --json
 ```
 
 - Reads every row of a CSV or Parquet extraction table, not a preview.
-- Reports labels, statuses, error counts, missing values, and up to five sample errors.
+- Reports labels, statuses, error counts, missing values, stream modes, decoding statuses, unsupported filters per document, and up to five sample errors.
 - Uses shorter display names; `--columns` shows their exported equivalents.
 - `--json` outputs the complete summary for scripts.
 
@@ -74,10 +90,10 @@ sibilla-b inspect ./features/benign.parquet --json
 | `unsupported_stream_filter` | The decoder does not support a stream's filter |
 | `decode_budget_exceeded` | A decoded stream would exceed the remaining budget |
 | `malformed_stream` | A supported decoder could not decode the stream |
-| `invalid_filter_chain` | The stream's filter declaration is malformed |
+| `invalid_filter_chain` | A filter declaration or parameter reference could not be resolved or interpreted |
 | `feature_depth_limit` | A feature traversal reached its nesting limit |
 
-Multiple reasons are stored in sorted `|`-separated form and counted separately. Older tables retain their original generic codes; run a new extraction to obtain the detailed reasons.
+Multiple reasons are stored in sorted `|`-separated form and counted separately. Current readers expect `pdf-v2`; use the matching older CLI to inspect older tables, or re-extract with the current version.
 
 The final extraction summary separates rejected files, timeouts and crashes, and reports reused records, files/second, and error counts.
 
@@ -117,14 +133,14 @@ Final tables are published atomically. Read [security limits](../SECURITY.md) be
 | Checkpoint directory exists | Reuse the original arguments with `--resume` |
 | Resume configuration or source content changed | Start a new run with a new output path |
 | Another extraction owns the checkpoint | Wait for that run to finish |
-| Incompatible feature tables | Use tables from the same schema and extractor version |
+| Incompatible feature tables | Use tables from the same schema, extractor version, and stream mode |
 | No labeled extractable samples | Check labels and extraction status before building the dataset |
 
 ## Build a dataset
 
 ```sh
 sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
-  -o ./datasets/pdf-v1 --split 70:15:15 --seed 42
+  -o ./datasets/pdf-v2 --split 70:15:15 --seed 42
 ```
 
 See [Build a dataset](DATASET_PROTOCOL.md) for grouping, label conflicts, and output files.
@@ -171,17 +187,3 @@ sibilla-b dataset build -i .local/demo/features.parquet \
 - Demonstrates the commands; it is not an evaluation corpus.
 
 The private `.fixtures` directory is optional and not required by CI.
-
-### Choose stream measurements
-
-```sh
-sibilla-b extract pdf -i ./samples --type benign -o ./structural.parquet --stream-mode structural
-sibilla-b extract pdf -i ./samples --type benign -o ./decoded.parquet --stream-mode decoded
-```
-
-`decoded` is the default: attempt bounded decoding and report incomplete coverage as partial.
-`structural` collects byte features, PDF structure, raw stream sizes and filter declarations without decoding streams for optional measurements. The parser may still decode streams needed to read PDF objects.
-Unsupported image codecs do not cause partial status in structural mode; malformed structure can still do so.
-
-Check `stream_decode_status`, coverage and counts before interpreting decoded measurements.
-New extractions use `pdf-v2`. Re-extract old `pdf-v1` inputs to build with this version; use one stream mode across all inputs. Existing checkpoint configurations cannot be reused across schemas or modes.

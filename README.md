@@ -78,10 +78,10 @@ Supply the labels yourself. Input files are read-only; output paths must be new.
 
 ```sh
 sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
-  -o ./datasets/pdf-v1 --split 70:15:15 --seed 42
+  -o ./datasets/pdf-v2 --split 70:15:15 --seed 42
 ```
 
-Open `./datasets/pdf-v1/report.json` to check counts and exclusions. Use `--group-column` when your tables contain meaningful related-file groups.
+Open `./datasets/pdf-v2/report.json` to check counts and exclusions. Use `--group-column` when your tables contain meaningful related-file groups.
 
 ### 3. Inspect the result
 
@@ -91,12 +91,13 @@ sibilla-b inspect ./features/benign.parquet --columns
 sibilla-b inspect ./features/benign.parquet --json
 ```
 
-Inspection reads every row, reporting labels, statuses, error reasons, missing values, and up to five sample errors. `--columns` maps shorter display names to the unchanged exported names.
+Inspection reads every row, reporting labels, statuses, error reasons, missing values, decoding coverage statuses, unsupported filter names, and up to five sample errors. `--columns` maps shorter display names to the unchanged exported names.
 
 ### 4. Adjust a run
 
 | I want to… | Add this option |
 | --- | --- |
+| Collect structure without optional decoding | `--stream-mode structural` |
 | Use four workers | `-j 4` on `extract pdf` |
 | Resume an interrupted extraction | `--resume`, keeping the original input and output arguments |
 | Turn colors off | `--no-color` or `--color never` |

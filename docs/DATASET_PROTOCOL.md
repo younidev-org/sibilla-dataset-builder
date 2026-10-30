@@ -8,7 +8,7 @@ Start with feature tables produced by `extract pdf`.
 
 ```sh
 sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
-  -o ./datasets/pdf-v1 --split 70:15:15 --seed 42 -j 4
+  -o ./datasets/pdf-v2 --split 70:15:15 --seed 42 -j 4
 ```
 
 | Option | Meaning |
@@ -19,7 +19,9 @@ sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv
 | `--seed 42` | Reproduce the same group allocation |
 | `-j`, `--workers` | Output writer limit; 1 runs sequentially, 2 or more allows both table writers |
 
-Tables must match the current PDF format, column schema, schema version, and extractor version. Labels must be `0`, `1`, or null; sample identities use lowercase SHA-256 hex.
+Tables must match the current PDF format, column schema, schema version, extractor version, and extraction stream mode. Labels must be `0`, `1`, or null; sample identities use lowercase SHA-256 hex.
+
+Current inputs use `pdf-v2`; older tables require re-extraction. Use the same `--stream-mode` for benign and malicious inputs. `dataset_metadata.json` records the mode.
 
 ## 2. Keep related files together
 
@@ -64,10 +66,12 @@ Conflicts include failed records that still carry the same hash. Unknown labels 
 | `report.json` | Review class/split counts, exclusions, duplicates, conflicts, and null rates |
 | `dataset_metadata.json` | Record the seed, split strategy, versions, and artifact hashes |
 | `manifest.parquet` | Inspect labels, provenance, and extraction quality |
-| `features.parquet` | Load predictive measurements |
+| `features.parquet` | Load feature measurements and the `sample_id` join key |
 | `splits/train.parquet` | Select training identities |
 | `splits/validation.parquet` | Select validation identities |
 | `splits/test.parquet` | Select test identities |
+
+Join the split IDs to `features.parquet` and obtain labels from `manifest.parquet` using `sample_id`. Split files contain IDs and split names, not feature vectors. The builder preserves missing and constant feature columns; choose and preprocess model inputs using training data only.
 
 Remove `sample_id` before training: it is a join key, not a predictive feature. Keep labels, provenance, hashes, quality fields, and timings out of model inputs.
 
@@ -85,5 +89,3 @@ Existing destination directories are refused. Publication is atomic and uses Lin
 With `-j 2` or higher, manifest and feature-table writers run concurrently through bounded queues. The spool is read once for both tables and null statistics. With `-j 1`, tables are written sequentially using two read passes.
 
 There are currently two heavy output tasks, so values above 2 do not add more table writers. Ingestion, deduplication and split assignment remain sequential; more workers do not guarantee maximum CPU use or a faster run on a slow disk.
-
-All inputs must use the current `pdf-v2` schema and the same extraction stream mode. `dataset_metadata.json` records that mode. Older schemas require re-extraction.

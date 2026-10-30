@@ -8,7 +8,10 @@ Run commands from this extracted directory. Linux x86-64 GNU binary, built on Ub
 ./sibilla-b extract pdf -i ./samples --type benign -o ./features.parquet
 ```
 
-Replace `./samples` with your PDF file or folder. Set `--type` to `benign`, `malicious`, or `unknown`; labels are never inferred. Existing output paths are refused.
+Replace `./samples` with your PDF file or folder. `--type` is required. Set it to `benign`, `malicious`, or `unknown`; labels are never inferred. Existing output paths are refused.
+
+For byte and structural features without optional stream decoding, add `--stream-mode structural`.
+The default `decoded` mode attempts bounded decoding; unsupported image filters can produce partial results while structural features remain available.
 
 ## Build a dataset
 
@@ -16,7 +19,7 @@ Replace `./samples` with your PDF file or folder. Set `--type` to `benign`, `mal
 ./sibilla-b dataset build -i ./features.parquet -o ./dataset --split 70:15:15 --seed 42 -j 2
 ```
 
-Repeat `-i` to combine tables. Check `dataset/report.json` before using the result. Unknown labels are excluded; related files need meaningful grouping to prevent split leakage.
+Repeat `-i` to combine tables from the same schema, extractor version, and stream mode. Check `dataset/report.json` before using the result. Unknown labels are excluded; related files need meaningful grouping to prevent split leakage.
 
 ## Inspect the result
 
@@ -25,7 +28,7 @@ Repeat `-i` to combine tables. Check `dataset/report.json` before using the resu
 ./sibilla-b inspect ./features.parquet --json
 ```
 
-Shows full row counts, labels, statuses, error reasons and missing measurements. Use `--columns` for readable column names.
+Shows full row counts, labels, statuses, error reasons, missing measurements, decoding statuses and unsupported filter names. Use `--columns` for readable column names.
 
 ## Useful options
 
@@ -44,7 +47,8 @@ Keep the hidden checkpoint directory beside the output if you need to resume.
 
 - Use a dedicated VM/container for untrusted PDFs. Process restrictions are not complete isolation.
 - The tool never executes or renders samples and never contacts extracted URLs.
-- This is a development implementation; `pdf-v1` is not frozen.
+- This is a development implementation; `pdf-v2` is not frozen.
+- Older `pdf-v1` tables/checkpoints require re-extraction to use this version.
 - Partial results contain null measurements. Indicators are not a malware verdict.
 - Remove `sample_id` before training; keep labels, provenance, and quality fields out of predictive inputs.
 
