@@ -2,7 +2,7 @@
 
 [< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
 
-Use the columns as measurements, not a malware verdict. `pdf-v3` is still in development.
+Use the columns as measurements, not a malware verdict. `pdf-v4` is still in development.
 
 ## Start with quality
 
@@ -89,7 +89,7 @@ CSV and Parquet preserve the same typed values, including empty strings. Readers
 
 For exact fields, see [`sibilla-b-schema`](../crates/sibilla-b-schema/src/lib.rs) and the [table schema](../crates/sibilla-b-output/src/lib.rs).
 
-### Stream coverage (`pdf-v3`)
+### Stream coverage (`pdf-v4`)
 
 Fields below use the `extraction_format_features_` prefix.
 
@@ -108,7 +108,7 @@ Counts, coverage and subset statistics are null when decoding is not attempted o
 
 The existing `extraction_parse_status` reports whether PDF structure was parsed independently of decoding status. Mode, decoding status and unsupported filter names stay in the manifest and are excluded from the numeric feature table. Indirect filter and parameter references are resolved with bounded reference traversal.
 
-## Static malware-related measurements (`pdf-v3`)
+## Static malware-related measurements (`pdf-v4`)
 
 The prefix for these columns is `extraction_format_features_malware_`.
 
@@ -140,3 +140,11 @@ Structural mode leaves payload byte/signature/lexical measurements and payload a
 Targeted payload decoding and general stream measurement each use their own aggregate `--max-decompressed-mb` budget. Parser-internal decoding and worker memory restrictions still apply. Targeted payloads are inspected first; structural mode does not attempt those payloads. Coverage status strings stay in the manifest, outside the feature table. Use the same mode for all dataset inputs.
 
 `catalog_action_reference_count` now counts the presence of catalog OpenAction and AA entry points (0–2). `document_javascript_action_count` remains unavailable; use the explicit context-specific counts above. The other previously unavailable historical measurements remain null. Old `pdf-v1` and `pdf-v2` tables/checkpoints require re-extraction for this schema.
+
+## Stream roles (`pdf-v4`)
+
+Stream-role columns use the `extraction_format_features_` prefix: `declared_image_stream_count`, `javascript_stream_count`, `attachment_stream_count`, `unknown_stream_count`, `overlapping_stream_role_count`, and `image_stream_decode_skipped_count`.
+
+Images are declared by Subtype Image. JavaScript streams are referenced by JS entries. Attachments are declared EmbeddedFile or referenced through EF dictionaries. Roles overlap; they never assert safety. Classification scans loaded objects, including unreachable objects, with 64-level and 100,000-visit bounds. If classification is incomplete, role counts are null and image skipping is disabled.
+
+Decoded mode skips image-only pixel decoding while retaining raw sizes and filter counts. Such runs report `images_not_attempted`, rather than a decoding error. Coverage still divides actually decoded streams by all streams; full decoded statistics remain null. Image/script or image/attachment overlaps are still decoded and may report unsupported filters. No image codecs are validated, and dimensions or image-content analysis are not provided. Re-extract earlier-schema tables for `pdf-v4`.

@@ -1,5 +1,6 @@
 //! Static parsing only. Call from a restricted subprocess, never the coordinator.
 mod malware;
+mod roles;
 use lopdf::{Document, LoadOptions, Object};
 use sibilla_b_schema::{Extraction, FormatExtractor, Limits, PdfFeatures, SCHEMA_VERSION, Status};
 use std::collections::BTreeMap;
@@ -312,8 +313,32 @@ fn measurements(
     .iter()
     .map(|s| (s.to_string(), 0))
     .collect();
-    for object in doc.objects.values() {
+    let roles = roles::classify(doc);
+    let mut skipped_images = 0;
+    features.declared_image_stream_count = Some(0);
+    features.javascript_stream_count = Some(0);
+    features.attachment_stream_count = Some(0);
+    features.unknown_stream_count = Some(0);
+    features.overlapping_stream_role_count = Some(0);
+    features.image_stream_decode_skipped_count = Some(0);
+    for (id, object) in &doc.objects {
         if let Object::Stream(stream) = object {
+            let role = roles.as_ref().and_then(|r| r.get(id)).copied().unwrap_or(0);
+            if role & 1 != 0 {
+                *features.declared_image_stream_count.as_mut().unwrap() += 1;
+            }
+            if role & 2 != 0 {
+                *features.javascript_stream_count.as_mut().unwrap() += 1;
+            }
+            if role & 4 != 0 {
+                *features.attachment_stream_count.as_mut().unwrap() += 1;
+            }
+            if role == 0 {
+                *features.unknown_stream_count.as_mut().unwrap() += 1;
+            }
+            if role.count_ones() > 1 {
+                *features.overlapping_stream_role_count.as_mut().unwrap() += 1;
+            }
             raw.push(stream.content.len() as f64);
             let stream = match resolved_stream(doc, stream) {
                 Ok(stream) => stream,
@@ -347,6 +372,10 @@ fn measurements(
                 }
             }
             if limits.stream_mode == sibilla_b_schema::StreamMode::Structural {
+                continue;
+            }
+            if roles.is_some() && role == 1 {
+                skipped_images += 1;
                 continue;
             }
             let identity =
@@ -404,6 +433,15 @@ fn measurements(
             }
         }
     }
+    features.image_stream_decode_skipped_count = Some(skipped_images);
+    if roles.is_none() {
+        reasons.insert("feature_depth_limit");
+        features.declared_image_stream_count = None;
+        features.javascript_stream_count = None;
+        features.attachment_stream_count = None;
+        features.unknown_stream_count = None;
+        features.overlapping_stream_role_count = None;
+    }
     let (mean, min, max, std) = stats(&raw);
     features.raw_stream_size_mean = Some(mean);
     features.raw_stream_size_min = Some(min);
@@ -422,7 +460,9 @@ fn measurements(
         features.stream_decode_status = Some("not_attempted".into());
     } else {
         features.stream_decode_status = Some(
-            if decoded.len() == raw.len() {
+            if decoded.len() + skipped_images == raw.len() && skipped_images > 0 {
+                "images_not_attempted"
+            } else if decoded.len() == raw.len() {
                 "complete"
             } else {
                 "partial"

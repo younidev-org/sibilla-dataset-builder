@@ -4,7 +4,7 @@
 
 This document prioritizes the fields visible in Sibilla's PDF feature-extraction dataset. The rankings below reflect **security relevance and interpretability**, not statistically validated model feature importance. A feature's presence is **not proof of malware**, and absence does **not prove safety**.
 
-For exact `pdf-v3` definitions and coverage rules, use the [schema guide](FEATURE_SCHEMA.md#static-malware-related-measurements-pdf-v3). This prioritization is an investigation aid, not a validated feature ranking.
+For exact `pdf-v4` definitions and coverage rules, use the [schema guide](FEATURE_SCHEMA.md#static-malware-related-measurements-pdf-v4). This prioritization is an investigation aid, not a validated feature ranking.
 
 Current action-context counts, script indicators, attachment signatures, URL measurements, and graph measurements use the `extraction_format_features_malware_` prefix. Payload measurements require decoded mode. `document_javascript_action_count`, `inaccessible_objects`, and `duplicate_object_ids` are legacy unavailable measurements; they remain null and should not be used as numeric evidence.
 
@@ -112,7 +112,7 @@ For a dataset containing approximately **10,000 benign and 5,000 suspicious PDFs
 
 ### Practical limitation of the current feature set
 
-The `pdf-v3` fields distinguish action types and trigger contexts and add bounded payload inspection. They still do not establish complete execution semantics. Remaining limits include:
+The `pdf-v4` fields distinguish action types and trigger contexts and add bounded payload inspection. They still do not establish complete execution semantics. Remaining limits include:
 
 - What JavaScript actually does.
 - Behavior hidden by JavaScript obfuscation beyond the lexical indicators.

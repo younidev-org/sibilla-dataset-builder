@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SCHEMA_VERSION: &str = "pdf-v3";
+pub const SCHEMA_VERSION: &str = "pdf-v4";
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CommonFeatures {
     pub sha256: String,
@@ -20,6 +20,13 @@ pub struct CommonFeatures {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct PdfFeatures {
+    pub declared_image_stream_count: Option<usize>,
+    pub javascript_stream_count: Option<usize>,
+    pub attachment_stream_count: Option<usize>,
+    pub unknown_stream_count: Option<usize>,
+    pub overlapping_stream_role_count: Option<usize>,
+    pub image_stream_decode_skipped_count: Option<usize>,
+
     pub malware: Option<MalwareFeatures>,
     pub stream_mode: Option<String>,
     pub stream_decode_unsupported_filters: Option<String>,

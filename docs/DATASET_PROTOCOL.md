@@ -8,7 +8,7 @@ Start with feature tables produced by `extract pdf`.
 
 ```sh
 sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
-  -o ./datasets/pdf-v3 --split 70:15:15 --seed 42 -j 4
+  -o ./datasets/pdf-v4 --split 70:15:15 --seed 42 -j 4
 ```
 
 | Option | Meaning |
@@ -21,7 +21,7 @@ sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv
 
 Tables must match the current PDF format, column schema, schema version, extractor version, and extraction stream mode. Labels must be `0`, `1`, or null; sample identities use lowercase SHA-256 hex.
 
-Current inputs use `pdf-v3`; older tables require re-extraction. Use the same `--stream-mode` for benign and malicious inputs. `dataset_metadata.json` records the mode.
+Current inputs use `pdf-v4`; older tables require re-extraction. Use the same `--stream-mode` for benign and malicious inputs. `dataset_metadata.json` records the mode.
 
 ## 2. Keep related files together
 

@@ -4,7 +4,7 @@
 
 This document explains the static PDF features visible in the Parquet dataset screenshots, including their meaning, possible security relevance, and limitations when training a malware risk classifier.
 
-> **Current definitions:** This guide explains the original feature families. For exact `pdf-v3` column definitions, null handling, and the new action, JavaScript, attachment, graph, and URL features, use the [schema guide](FEATURE_SCHEMA.md). Fields such as `document_javascript_action_count`, `inaccessible_objects`, `duplicate_object_ids`, and `xref_table_count` remain unavailable; their intended meanings below do not imply that the extractor measures them.
+> **Current definitions:** This guide explains the original feature families. For exact `pdf-v4` column definitions, null handling, and the new action, JavaScript, attachment, graph, and URL features, use the [schema guide](FEATURE_SCHEMA.md). Fields such as `document_javascript_action_count`, `inaccessible_objects`, `duplicate_object_ids`, and `xref_table_count` remain unavailable; their intended meanings below do not imply that the extractor measures them.
 
 ## Feature families at a glance
 

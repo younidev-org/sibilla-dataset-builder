@@ -50,7 +50,7 @@ Keep the hidden checkpoint directory beside the output if you need to resume.
 
 - Use a dedicated VM/container for untrusted PDFs. Process restrictions are not complete isolation.
 - The tool never executes or renders samples and never contacts extracted URLs.
-- This is a development implementation; `pdf-v3` is not frozen.
+- This is a development implementation; `pdf-v4` is not frozen.
 - Older `pdf-v1`/`pdf-v2` tables/checkpoints require re-extraction to use this version.
 - Partial results contain null measurements. Indicators are not a malware verdict.
 - Remove `sample_id` before training; keep labels, provenance, and quality fields out of predictive inputs.

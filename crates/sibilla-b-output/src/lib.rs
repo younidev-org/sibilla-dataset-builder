@@ -133,6 +133,13 @@ pub fn extraction_schema() -> Arc<Schema> {
         extraction: sibilla_b_schema::Extraction {
             common_features: Some(sibilla_b_common_features::extract(&[])),
             format_features: Some(PdfFeatures {
+                declared_image_stream_count: Some(0),
+                javascript_stream_count: Some(0),
+                attachment_stream_count: Some(0),
+                unknown_stream_count: Some(0),
+                overlapping_stream_role_count: Some(0),
+                image_stream_decode_skipped_count: Some(0),
+
                 malware: Some(sibilla_b_schema::MalwareFeatures {
                     structure_status: String::new(),
                     payload_status: String::new(),
