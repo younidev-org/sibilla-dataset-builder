@@ -59,7 +59,7 @@ sibilla-b extract pdf -i ./samples --type benign -o ./decoded.parquet --stream-m
 Unsupported image codecs do not cause partial status in structural mode; malformed structure can still do so. Both modes analyze action triggers and reachable objects. Decoded mode also inspects script and attachment payloads statically, before general stream statistics.
 
 Check `stream_decode_status`, coverage and counts before interpreting decoded measurements.
-New extractions use `pdf-v4`. Re-extract old `pdf-v1`/`pdf-v2` inputs to build with this version; use one stream mode across all inputs. Existing checkpoint configurations cannot be reused across schemas or modes.
+New extractions use `pdf-v5`. Re-extract old `pdf-v1`/`pdf-v2` inputs to build with this version; use one stream mode across all inputs. Existing checkpoint configurations cannot be reused across schemas or modes.
 
 ## Resume an interrupted run
 
@@ -103,7 +103,7 @@ sibilla-b inspect ./features/benign.parquet --json
 | `malware_analysis_incomplete` | Action/graph traversal or targeted payload analysis was incomplete |
 | `feature_depth_limit` | A feature traversal reached its nesting limit |
 
-Multiple reasons are stored in sorted `|`-separated form and counted separately. Current readers expect `pdf-v4`; use the matching older CLI to inspect older tables, or re-extract with the current version.
+Multiple reasons are stored in sorted `|`-separated form and counted separately. Current readers expect `pdf-v5`; use the matching older CLI to inspect older tables, or re-extract with the current version.
 
 The final extraction summary separates rejected files, timeouts and crashes, and reports reused records, files/second, and error counts.
 
@@ -150,7 +150,7 @@ Final tables are published atomically. Read [security limits](../SECURITY.md) be
 
 ```sh
 sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
-  -o ./datasets/pdf-v4 --split 70:15:15 --seed 42
+  -o ./datasets/pdf-v5 --split 70:15:15 --seed 42
 ```
 
 See [Build a dataset](DATASET_PROTOCOL.md) for grouping, label conflicts, and output files.
@@ -207,4 +207,17 @@ sibilla-b inspect ./analysis.parquet --json > ./analysis-report.json
 
 The table contains action-trigger counts, reachable/unreachable objects, broken references, JavaScript lexical indicators, attachment signatures, and URL syntax measurements. `inspect` reports structure and payload analysis coverage. No JavaScript or attachment is executed, and no URL is contacted.
 
-Use `--type benign` or `--type malicious` when producing labeled dataset inputs. Script tokens, embedded executable signatures, and unreachable objects are indicators, not automatic malware labels. See [feature definitions](FEATURE_SCHEMA.md#static-malware-related-measurements-pdf-v4) for coverage and limits.
+Use `--type benign` or `--type malicious` when producing labeled dataset inputs. Script tokens, embedded executable signatures, and unreachable objects are indicators, not automatic malware labels. See [feature definitions](FEATURE_SCHEMA.md#static-malware-related-measurements-pdf-v5) for coverage and limits.
+
+## Optional JPEG validation and quality reports
+
+```sh
+sibilla-b extract pdf -i ./samples --type unknown -o ./checked.parquet --decode-images
+sibilla-b inspect ./checked.parquet --json > ./checked-report.json
+```
+
+`--decode-images` requires decoded mode. It attempts JPEG pixel decoding with an independent aggregate output budget of `--max-decompressed-mb`; worker memory/time limits still apply. Other image codecs report unsupported. General stream statistics still intentionally exclude image-only pixels, so their coverage status may remain `images_not_attempted` even when the independent image analysis completes.
+
+Image metadata is always measured. Inspect `extraction_format_features_images_decode_status` and its unsupported/invalid-data/budget counters before interpreting successful pixel measurements. A decoding error is not a malware label. Diagnostics in `malware_failure_reasons` distinguish traversal limits, unresolved references, unsupported payload codecs, invalid payload types/data and exhausted budgets.
+
+Inspection JSON includes `quality_by_label_source`: missing counts, all-null columns, constant non-null columns and extraction outcomes per label/source. Null source is kept distinct from source strings. Reports support at most 128 label/source groups and stop explicitly above that limit. Dataset reports show both input and retained-sample quality groups; discarded rows are not part of retained statistics. Constant means all observed non-null values match, not that the field is complete.

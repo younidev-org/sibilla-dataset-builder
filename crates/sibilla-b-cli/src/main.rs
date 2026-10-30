@@ -84,6 +84,9 @@ enum Label {
 }
 #[derive(Args)]
 struct Extract {
+    /// Attempt bounded JPEG image decoding in decoded mode
+    #[arg(long)]
+    decode_images: bool,
     /// Collect structure only, or also attempt bounded stream decoding
     #[arg(long, default_value = "decoded", value_parser = ["structural", "decoded"])]
     stream_mode: String,

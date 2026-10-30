@@ -8,7 +8,7 @@ Start with feature tables produced by `extract pdf`.
 
 ```sh
 sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
-  -o ./datasets/pdf-v4 --split 70:15:15 --seed 42 -j 4
+  -o ./datasets/pdf-v5 --split 70:15:15 --seed 42 -j 4
 ```
 
 | Option | Meaning |
@@ -21,7 +21,7 @@ sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv
 
 Tables must match the current PDF format, column schema, schema version, extractor version, and extraction stream mode. Labels must be `0`, `1`, or null; sample identities use lowercase SHA-256 hex.
 
-Current inputs use `pdf-v4`; older tables require re-extraction. Use the same `--stream-mode` for benign and malicious inputs. `dataset_metadata.json` records the mode.
+Current inputs use `pdf-v5`; older tables require re-extraction. Use the same `--stream-mode` for benign and malicious inputs. `dataset_metadata.json` records the mode.
 
 ## 2. Keep related files together
 
@@ -89,3 +89,5 @@ Existing destination directories are refused. Publication is atomic and uses Lin
 With `-j 2` or higher, manifest and feature-table writers run concurrently through bounded queues. The spool is read once for both tables and null statistics. With `-j 1`, tables are written sequentially using two read passes.
 
 There are currently two heavy output tasks, so values above 2 do not add more table writers. Ingestion, deduplication and split assignment remain sequential; more workers do not guarantee maximum CPU use or a faster run on a slow disk.
+
+Keep `--decode-images` consistent across all inputs. `report.json` includes quality by label/source for input rows and retained samples; this separates extraction outcomes from deduplication and label exclusions.

@@ -37,6 +37,7 @@ Shows full row counts, labels, statuses, error reasons, missing measurements, de
 | Task | Option |
 | --- | --- |
 | Process at most 10,000 files | `--limit 10000` |
+| Attempt bounded JPEG validation | `--decode-images` (decoded mode only) |
 | Choose extraction workers | `-j 4` |
 | Resume extraction with the original arguments | `--resume` |
 | Disable colors | `--no-color` |
@@ -50,7 +51,7 @@ Keep the hidden checkpoint directory beside the output if you need to resume.
 
 - Use a dedicated VM/container for untrusted PDFs. Process restrictions are not complete isolation.
 - The tool never executes or renders samples and never contacts extracted URLs.
-- This is a development implementation; `pdf-v4` is not frozen.
+- This is a development implementation; `pdf-v5` is not frozen.
 - Older `pdf-v1`/`pdf-v2` tables/checkpoints require re-extraction to use this version.
 - Partial results contain null measurements. Indicators are not a malware verdict.
 - Remove `sample_id` before training; keep labels, provenance, and quality fields out of predictive inputs.

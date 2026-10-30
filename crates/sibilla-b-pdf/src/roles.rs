@@ -1,7 +1,18 @@
-//! Declared and reference-derived roles; no role asserts that a stream is safe.
+//! Conservative stream roles from declarations and references, without payload execution.
+//!
+//! Roles are flags: image = 1, JavaScript = 2, attachment = 4. Zero means unrecognized;
+//! multiple flags preserve overlap rather than choosing a single supposedly safe role.
+//! Scanning includes unreachable loaded objects, unlike action/payload analysis.
+//! A role is a declared or syntactic relationship, not validation of the content.
 use lopdf::{Document, Object, ObjectId};
 use std::collections::BTreeMap;
-/// Classify loaded streams; return no classification if bounded scanning is incomplete.
+/// Map loaded indirect stream identities to image/script/attachment role flags.
+///
+/// Scans at most 100,000 direct-object visits and 64 nesting levels. Indirect values
+/// used for JS/EF targets are resolved with the document's bounded dereferencer.
+/// Returns `None` on scan exhaustion or an unresolved JS/EF reference, causing the
+/// caller to disable image-only skipping rather than silently assume absent overlap.
+/// Individual image declarations and attached-stream types are inspected as loaded.
 pub(super) fn classify(doc: &Document) -> Option<BTreeMap<ObjectId, u8>> {
     let mut roles = BTreeMap::new();
     let mut stack: Vec<_> = doc.objects.values().map(|v| (v, 0)).collect();

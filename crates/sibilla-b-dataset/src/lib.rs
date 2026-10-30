@@ -21,6 +21,7 @@ struct Samples {
     conflicts: usize,
     excluded: usize,
     stream_mode: Option<Value>,
+    image_policy: Option<Value>,
 }
 impl Samples {
     /// Validate sample metadata, deduplicate identities and enforce label/group consistency.
@@ -87,6 +88,18 @@ impl Samples {
             bail!("incompatible extraction stream modes");
         }
         self.stream_mode = Some(mode);
+        let policy = row
+            .get("extraction_format_features_image_decode_enabled")
+            .cloned()
+            .unwrap_or(Value::Null);
+        if self
+            .image_policy
+            .as_ref()
+            .is_some_and(|previous| previous != &policy)
+        {
+            bail!("incompatible image decoding policies");
+        }
+        self.image_policy = Some(policy);
         if self.quarantined.contains(&id) {
             self.duplicates += 1;
             return Ok(());
@@ -196,7 +209,22 @@ fn assign(
     }
     Ok(assignments)
 }
-/// Validate feature tables and atomically assemble a deduplicated grouped dataset.
+/// Validate tables and atomically publish a deduplicated, group-aware dataset directory.
+///
+/// Inputs must match the current schema/extractor version, stream mode, and image
+/// decoding policy. Unknown labels and unusable extractions are excluded; partial
+/// rows can remain usable. Exact identities are deduplicated before assigning whole
+/// groups to seeded, label-balanced splits. This does not detect near duplicates.
+///
+/// Input quality describes all observed rows; retained quality describes deduplicated
+/// rows selected for output. Manifest data retains provenance and extraction diagnostics,
+/// while the feature table omits the explicitly defined quality/control columns.
+/// `workers` bounds output writers, with at most two heavy table-writing tasks.
+///
+/// # Errors
+/// Rejects incompatible inputs, invalid split/worker settings, conflicting identities
+/// (unless quarantined), or an existing destination. Publication uses a staged
+/// directory and no-replace rename, preserving existing destinations on failure.
 pub fn build(
     inputs: &[PathBuf],
     output: &Path,
@@ -228,8 +256,12 @@ pub fn build(
         ..Samples::default()
     };
     // shortcut: identity/group metadata remains in memory; external sorting is needed for million-sample corpora.
+    let mut input_quality = sibilla_b_output::quality::QualitySummary::default();
     for path in inputs {
-        sibilla_b_output::read(path, schema.clone(), |row| samples.add(row, quarantine))?;
+        sibilla_b_output::read(path, schema.clone(), |row| {
+            input_quality.observe(&row)?;
+            samples.add(row, quarantine)
+        })?;
     }
     if samples.rows.is_empty() {
         bail!("no labeled extractable samples");
@@ -255,18 +287,32 @@ pub fn build(
                 || (f.name().starts_with("extraction_common_features_")
                     && !f.name().ends_with("sha256"))
                 || (f.name().starts_with("extraction_format_features_")
+                    && !f
+                        .name()
+                        .starts_with("extraction_format_features_stream_decode_")
+                    && !f
+                        .name()
+                        .starts_with("extraction_format_features_malware_payload_")
                     && !matches!(
                         f.name().as_str(),
                         "extraction_format_features_stream_mode"
+                            | "extraction_format_features_image_decode_enabled"
+                            | "extraction_format_features_image_stream_decode_skipped_count"
+                            | "extraction_format_features_images_decoded_count"
+                            | "extraction_format_features_images_unsupported_count"
+                            | "extraction_format_features_images_invalid_data_count"
+                            | "extraction_format_features_images_budget_exceeded_count"
                             | "extraction_format_features_stream_decode_status"
                             | "extraction_format_features_stream_decode_unsupported_filters"
                             | "extraction_format_features_malware_structure_status"
                             | "extraction_format_features_malware_payload_status"
+                            | "extraction_format_features_malware_failure_reasons"
+                            | "extraction_format_features_images_decode_status"
                     ))
         })
         .cloned()
         .collect();
-    let null_counts = write_tables(
+    let (null_counts, quality) = write_tables(
         &samples,
         root,
         schema.clone(),
@@ -308,7 +354,7 @@ pub fn build(
         .iter()
         .map(|(key, count)| (key.clone(), *count as f64 / samples.rows.len() as f64))
         .collect();
-    let report = json!({"samples":samples.rows.len(),"duplicates":samples.duplicates,"conflicts":samples.conflicts,"quarantined_sample_ids":samples.quarantined,"excluded":samples.excluded,"splits":split_counts,"null_counts":null_counts,"null_rates":null_rates,"class_counts_per_split":class_counts});
+    let report = json!({"input_quality_by_label_source":input_quality.report(),"quality_by_label_source":quality,"samples":samples.rows.len(),"duplicates":samples.duplicates,"conflicts":samples.conflicts,"quarantined_sample_ids":samples.quarantined,"excluded":samples.excluded,"splits":split_counts,"null_counts":null_counts,"null_rates":null_rates,"class_counts_per_split":class_counts});
     write_synced(
         root.join("report.json"),
         serde_json::to_vec_pretty(&report)?,
@@ -337,7 +383,7 @@ pub fn build(
     write_synced(
         root.join("dataset_metadata.json"),
         serde_json::to_vec_pretty(
-            &json!({"schema":sibilla_b_schema::SCHEMA_VERSION,"extractor_version":env!("CARGO_PKG_VERSION"),"seed":seed,"split":split,"group_column":group,"artifact_sha256":hashes,"stream_mode":samples.stream_mode,"strategy":"seeded group allocation with label balancing","identity_column":"sample_id is a join key; remove before training"}),
+            &json!({"schema":sibilla_b_schema::SCHEMA_VERSION,"extractor_version":env!("CARGO_PKG_VERSION"),"seed":seed,"split":split,"group_column":group,"artifact_sha256":hashes,"stream_mode":samples.stream_mode,"image_decode_enabled":samples.image_policy,"strategy":"seeded group allocation with label balancing","identity_column":"sample_id is a join key; remove before training"}),
         )?,
     )?;
     std::fs::File::open(root)?.sync_all()?;
@@ -368,7 +414,8 @@ fn write_tables(
     schema: Arc<Schema>,
     features: Arc<Schema>,
     workers: usize,
-) -> Result<BTreeMap<String, usize>> {
+) -> Result<(BTreeMap<String, usize>, Value)> {
+    let mut quality = sibilla_b_output::quality::QualitySummary::default();
     let mut counts: BTreeMap<String, usize> = schema
         .fields()
         .iter()
@@ -377,6 +424,7 @@ fn write_tables(
     if workers == 1 {
         let rows = samples.records().map(|row| {
             let row = row?;
+            quality.observe(&row)?;
             count_nulls(&row, &mut counts);
             Ok(row)
         });
@@ -403,6 +451,7 @@ fn write_tables(
             let produced = (|| -> Result<()> {
                 for row in samples.records() {
                     let row = row?;
+                    quality.observe(&row)?;
                     count_nulls(&row, &mut counts);
                     manifest_tx
                         .send(row.clone())
@@ -426,7 +475,7 @@ fn write_tables(
             produced
         })?;
     }
-    Ok(counts)
+    Ok((counts, quality.report()))
 }
 /// Count unavailable fields without rereading the spool for a separate reporting pass.
 fn count_nulls(row: &Row, counts: &mut BTreeMap<String, usize>) {

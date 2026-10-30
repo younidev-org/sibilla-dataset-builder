@@ -10,6 +10,7 @@ Pick the task you want to finish.
 | Choose structural or decoded measurements | [Stream modes](USAGE.md#choose-stream-measurements) |
 | Limit extraction to the first N files | [Input limit](USAGE.md#limit-the-number-of-input-files) |
 | Inspect actions, scripts, attachments, and URLs | [Static analysis](USAGE.md#inspect-malware-related-measurements) |
+| Validate JPEGs and compare extraction quality | [Image and quality reports](USAGE.md#optional-jpeg-validation-and-quality-reports) |
 | Continue an interrupted run | [Resume](USAGE.md#resume-an-interrupted-run) |
 | Try the tool without my own files | [Safe demonstration](USAGE.md#safe-demonstration) |
 | Combine labels and create splits | [Build a dataset](DATASET_PROTOCOL.md) |

@@ -84,7 +84,11 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
     {
         bail!("failure sidecar already exists or aliases output");
     }
+    if args.decode_images && args.stream_mode == "structural" {
+        bail!("--decode-images requires --stream-mode decoded");
+    }
     let limits = Limits {
+        decode_images: args.decode_images,
         max_size_bytes: args
             .max_size_mb
             .checked_mul(1024 * 1024)

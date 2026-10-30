@@ -1,4 +1,5 @@
 //! Static parsing only. Call from a restricted subprocess, never the coordinator.
+mod images;
 mod malware;
 mod roles;
 use lopdf::{Document, LoadOptions, Object};
@@ -86,6 +87,7 @@ impl FormatExtractor for PdfExtractor {
             };
         };
         let mut features = PdfFeatures {
+            image_decode_enabled: Some(limits.decode_images),
             stream_mode: Some(
                 match limits.stream_mode {
                     sibilla_b_schema::StreamMode::Structural => "structural",
@@ -128,6 +130,7 @@ impl FormatExtractor for PdfExtractor {
             }
             Ok(doc) => {
                 let analysis = malware::analyze(&doc, limits);
+                features.images = Some(images::analyze(&doc, limits));
                 let mut reasons = measurements(&doc, &mut features, limits);
                 if analysis.structure_status != "complete" || analysis.payload_status == "partial" {
                     reasons.insert("malware_analysis_incomplete");

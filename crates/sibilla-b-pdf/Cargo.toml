@@ -13,3 +13,4 @@ sibilla-b-schema = { path = "../sibilla-b-schema" }
 lopdf.workspace = true
 sibilla-b-common-features = { path = "../sibilla-b-common-features" }
 url = "2"
+jpeg-decoder = { version = "0.3.2", default-features = false }

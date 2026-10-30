@@ -4,6 +4,7 @@ use std::{collections::BTreeMap, path::Path};
 /// Read every extraction row with bounded sample storage and report quality and missingness.
 pub fn run(path: &Path, as_json: bool, columns: bool) -> Result<()> {
     let schema = sibilla_b_output::extraction_schema();
+    let mut quality = sibilla_b_output::quality::QualitySummary::default();
     let mut rows = 0u64;
     let mut statuses = BTreeMap::<String, u64>::new();
     let mut labels = BTreeMap::<String, u64>::new();
@@ -18,10 +19,25 @@ pub fn run(path: &Path, as_json: bool, columns: bool) -> Result<()> {
     let mut decoding = BTreeMap::<String, u64>::new();
     let mut analysis_structure = BTreeMap::<String, u64>::new();
     let mut analysis_payloads = BTreeMap::<String, u64>::new();
+    let mut images = BTreeMap::<String, u64>::new();
+    let mut analysis_reasons = BTreeMap::<String, u64>::new();
     let mut unsupported_filters = BTreeMap::<String, u64>::new();
     sibilla_b_output::read(path, schema.clone(), |row| {
+        quality.observe(&row)?;
         rows += 1;
+        if let Some(reasons) = row
+            .get("extraction_format_features_malware_failure_reasons")
+            .and_then(Value::as_str)
+        {
+            for reason in reasons.split('|').filter(|r| !r.is_empty()) {
+                *analysis_reasons.entry(reason.to_owned()).or_default() += 1;
+            }
+        }
         for (column, counts) in [
+            (
+                "extraction_format_features_images_decode_status",
+                &mut images,
+            ),
             (
                 "extraction_format_features_malware_structure_status",
                 &mut analysis_structure,
@@ -79,7 +95,7 @@ pub fn run(path: &Path, as_json: bool, columns: bool) -> Result<()> {
         }
         Ok(())
     })?;
-    let report = json!({"rows":rows,"columns":schema.fields().len(),"statuses":statuses,"labels":labels,"errors":errors,"missing":missing,"sample_errors":samples,"malware_structure_statuses":analysis_structure,"malware_payload_statuses":analysis_payloads,"stream_modes":modes,"stream_decode_statuses":decoding,"unsupported_filters_per_document":unsupported_filters});
+    let report = json!({"image_decode_statuses":images,"analysis_failure_reasons":analysis_reasons,"quality_by_label_source":quality.report(),"rows":rows,"columns":schema.fields().len(),"statuses":statuses,"labels":labels,"errors":errors,"missing":missing,"sample_errors":samples,"malware_structure_statuses":analysis_structure,"malware_payload_statuses":analysis_payloads,"stream_modes":modes,"stream_decode_statuses":decoding,"unsupported_filters_per_document":unsupported_filters});
     if as_json {
         println!("{}", serde_json::to_string_pretty(&report)?);
         return Ok(());
@@ -89,6 +105,8 @@ pub fn run(path: &Path, as_json: bool, columns: bool) -> Result<()> {
         ("Statuses", &statuses),
         ("Labels (0=benign, 1=malicious)", &labels),
         ("Error reasons", &errors),
+        ("Analysis failure reasons", &analysis_reasons),
+        ("Image decoding", &images),
         ("Malware structure analysis", &analysis_structure),
         ("Malware payload analysis", &analysis_payloads),
         ("Stream modes", &modes),
@@ -111,6 +129,16 @@ pub fn run(path: &Path, as_json: bool, columns: bool) -> Result<()> {
         for sample in samples {
             println!("  {}: {}", sample["sample_id"], sample["error_code"]);
         }
+    }
+    for group in quality.report().as_array().into_iter().flatten() {
+        println!(
+            "\nQuality: label={} source={} rows={} all-null={} constant={}",
+            group["label"],
+            group["source"],
+            group["rows"],
+            group["all_null_columns"].as_array().unwrap().len(),
+            group["constant_non_null_columns"].as_array().unwrap().len()
+        );
     }
     if columns {
         println!("\nDisplay name -> exported name:");

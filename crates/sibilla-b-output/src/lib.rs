@@ -1,4 +1,5 @@
 //! Fixed typed tables and atomic publication. No partially written final outputs.
+pub mod quality;
 use anyhow::{Context, Result, bail};
 use arrow_array::{
     Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
@@ -133,6 +134,30 @@ pub fn extraction_schema() -> Arc<Schema> {
         extraction: sibilla_b_schema::Extraction {
             common_features: Some(sibilla_b_common_features::extract(&[])),
             format_features: Some(PdfFeatures {
+                image_decode_enabled: Some(false),
+                images: Some(sibilla_b_schema::ImageFeatures {
+                    grayscale_count: Some(0),
+                    rgb_count: Some(0),
+                    cmyk_count: Some(0),
+                    other_color_space_count: Some(0),
+                    max_bits_per_component: Some(0),
+                    image_mask_count: Some(0),
+
+                    decode_status: String::new(),
+                    image_count: Some(0),
+                    invalid_parameters_count: Some(0),
+                    encoded_bytes: Some(0),
+                    max_declared_width: Some(0),
+                    max_declared_height: Some(0),
+                    decoded_count: Some(0),
+                    decoded_bytes: Some(0),
+                    max_decoded_width: Some(0),
+                    max_decoded_height: Some(0),
+                    dimension_mismatch_count: Some(0),
+                    unsupported_count: Some(0),
+                    invalid_data_count: Some(0),
+                    budget_exceeded_count: Some(0),
+                }),
                 declared_image_stream_count: Some(0),
                 javascript_stream_count: Some(0),
                 attachment_stream_count: Some(0),
@@ -143,6 +168,12 @@ pub fn extraction_schema() -> Arc<Schema> {
                 malware: Some(sibilla_b_schema::MalwareFeatures {
                     structure_status: String::new(),
                     payload_status: String::new(),
+                    failure_reasons: String::new(),
+                    annotation_primary_javascript_count: Some(0),
+                    page_event_javascript_count: Some(0),
+                    document_event_javascript_count: Some(0),
+
+                    attachment_type_mismatch_count: Some(0),
                     reachable_objects: Some(0),
                     unreachable_objects: Some(0),
                     broken_references: Some(0),
