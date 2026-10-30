@@ -1,8 +1,10 @@
-# Sibilla PDF Dataset — Complete Feature Reference
+# Sibilla PDF Dataset — Feature Explanations
+
+[< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
 
 This document explains the static PDF features visible in the Parquet dataset screenshots, including their meaning, possible security relevance, and limitations when training a malware risk classifier.
 
-> **Implementation caveat:** The column names indicate the intended measurements, but exact counting semantics, default values, entropy block size, high-entropy thresholds, and handling of malformed PDFs depend on the actual Sibilla feature extractor. Descriptions here should be checked against the Rust implementation before they become a formal dataset specification.
+> **Current definitions:** This guide explains the original feature families. For exact `pdf-v3` column definitions, null handling, and the new action, JavaScript, attachment, graph, and URL features, use the [schema guide](FEATURE_SCHEMA.md). Fields such as `document_javascript_action_count`, `inaccessible_objects`, `duplicate_object_ids`, and `xref_table_count` remain unavailable; their intended meanings below do not imply that the extractor measures them.
 
 ## Feature families at a glance
 
@@ -29,11 +31,11 @@ All fields in this section begin with:
 
 A histogram field exists for every possible byte value, from:
 
-- `extraction_common_features_byte_histogram_0`
+- `extraction_common_features_byte_histogram_000`
 - ...
 - `extraction_common_features_byte_histogram_255`
 
-A byte is an unsigned 8-bit value in the range **0–255**. Each histogram feature records the count or relative frequency of one byte value across the file. Confirm whether Sibilla stores raw counts, fractions (0–1), or percentages.
+A byte is an unsigned 8-bit value in the range **0–255**. Each histogram feature records the normalized frequency (0–1) of one byte value across the file. Nonempty-file histogram values sum to approximately 1.
 
 The screenshot specifically shows:
 
@@ -102,7 +104,7 @@ Illustrative entropy interpretation (not calibrated detection thresholds):
 
 **Why block entropy matters:** A PDF can have moderate overall entropy while containing one very high-entropy region. `entropy_block_max` can capture that region; `high_entropy_block_ratio` indicates how widespread such regions are.
 
-**Important limitations:** A high-entropy region can be an ordinary compressed image or font. Verify the block size, policy for partial final blocks, and the exact high-entropy cutoff in the extractor.
+**Important limitations:** A high-entropy region can be an ordinary compressed image or font. Sibilla uses 4096-byte blocks, includes the final short block, and defines high entropy as strictly above 7.5 bits per byte.
 
 ---
 
@@ -192,15 +194,15 @@ A PDF stream can contain compressed page content, images, fonts, attachments, or
 | `raw_stream_size_mean` | Average stored/encoded stream size |
 | `raw_stream_size_min` | Smallest stored/encoded stream size |
 | `raw_stream_size_std` | Standard deviation of stored/encoded stream sizes |
-| `decoded_stream_size_max` | Largest successfully decoded stream size |
-| `decoded_stream_size_mean` | Average successfully decoded stream size |
-| `decoded_stream_size_min` | Smallest successfully decoded stream size |
-| `decoded_stream_size_std` | Standard deviation of successfully decoded stream sizes |
+| `decoded_stream_size_max` | Largest decoded stream size, available only with complete coverage |
+| `decoded_stream_size_mean` | Average decoded stream size, available only with complete coverage |
+| `decoded_stream_size_min` | Smallest decoded stream size, available only with complete coverage |
+| `decoded_stream_size_std` | Standard deviation of decoded stream sizes, available only with complete coverage |
 | `high_entropy_stream_ratio` | Fraction of streams classified as high entropy under extractor rules |
 
 **Example:** A compressed stream might occupy 25 KB in the file and expand to 100 KB after decoding. That is normal for many compression methods. The security meaning depends on the size distribution, decoding behavior, and how it compares with benign documents.
 
-**Implementation detail to confirm:** If a stream cannot be decoded, does the extractor omit it, store a size of zero, or record a separate failure? This can change the meaning of all decoded-stream summary statistics.
+If any stream cannot be decoded, the full `decoded_stream_size_*` statistics remain null. `supported_decoded_stream_size_*` describes the successfully decoded subset; check `stream_decode_coverage_ratio`. Structural mode leaves decoded measurements null.
 
 ### 3.2 Filter counts
 

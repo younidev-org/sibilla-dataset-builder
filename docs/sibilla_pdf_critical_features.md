@@ -1,6 +1,12 @@
 # Sibilla — Most Critical Static PDF Features for Malware Detection
 
+[< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
+
 This document prioritizes the fields visible in Sibilla's PDF feature-extraction dataset. The rankings below reflect **security relevance and interpretability**, not statistically validated model feature importance. A feature's presence is **not proof of malware**, and absence does **not prove safety**.
+
+For exact `pdf-v3` definitions and coverage rules, use the [schema guide](FEATURE_SCHEMA.md#static-malware-related-measurements-pdf-v3). This prioritization is an investigation aid, not a validated feature ranking.
+
+Current action-context counts, script indicators, attachment signatures, URL measurements, and graph measurements use the `extraction_format_features_malware_` prefix. Payload measurements require decoded mode. `document_javascript_action_count`, `inaccessible_objects`, and `duplicate_object_ids` are legacy unavailable measurements; they remain null and should not be used as numeric evidence.
 
 ## 1. Highest-priority features
 
@@ -8,7 +14,7 @@ All fields in the table below have the prefix `extraction_format_features_`.
 
 | Priority | Feature suffix | Why it matters |
 |---:|---|---|
-| 1 | `document_javascript_action_count` | Counts identified JavaScript actions, a direct indicator of script-bearing PDFs. |
+| 1 | `malware_javascript_action_count` | Counts JavaScript action relationships reached from known trigger contexts; inspect the context-specific counts too. |
 | 2 | `parsed_names_Launch` | Identifies launch-action constructs that can request opening files or applications. |
 | 3 | `parsed_names_OpenAction` | Identifies actions or destinations associated with document opening. |
 | 4 | `parsed_names_AA` | Identifies additional actions associated with events or interactions. |
@@ -16,7 +22,7 @@ All fields in the table below have the prefix `extraction_format_features_`.
 | 6 | `parsed_names_JavaScript` | Detects JavaScript action-related names. |
 | 7 | `embedded_file_count` | Counts embedded attachments that may carry additional content or payloads. |
 | 8 | `suspicious_filter_chain_count` | Counts filter chains flagged by the extractor's own heuristics; verify its exact rules. |
-| 9 | `inaccessible_objects` | Measures objects the PDF parser could not access, resolve, or inspect. |
+| 9 | `malware_broken_references` | Counts missing referenced identities when graph analysis completes. |
 | 10 | `encoded_name_raw_count` | Counts encoded PDF names, which can complicate naive static scanning. |
 
 **Interpretation:** Pay particular attention to **relationships** between scripting, launch/open actions, embedded files, and parser anomalies. Any single count may occur in legitimate PDFs.
@@ -31,7 +37,7 @@ The first column lists suffixes; add `extraction_format_features_` unless otherw
 | `external_host_count` | Characterizes external hosts referenced by the document. |
 | `parsed_names_SubmitForm` | May indicate actions that submit form data. |
 | `parsed_names_URI` | Indicates URI-related constructs. |
-| `duplicate_object_ids` | May identify unusual structures; can also arise from legitimate revisions. |
+| `malware_unreachable_objects` | Loaded objects unreachable from the trailer; may also be ordinary parser or revision artifacts. |
 | `raw_tokens_JavaScript` | Finds JavaScript-related tokens through raw scanning. |
 | `raw_tokens_OpenAction` | Finds opening-action tokens through raw scanning. |
 | `filter_depth_max` | Measures the deepest stream filter chain. |
@@ -45,7 +51,7 @@ External links and form-related actions are worth retaining: some harmful PDFs u
 
 These features are useful as **statistical context** but are generally less directly interpretable as indicators of malicious behavior:
 
-- `extraction_common_features_byte_histogram_0` through `extraction_common_features_byte_histogram_255`
+- `extraction_common_features_byte_histogram_000` through `extraction_common_features_byte_histogram_255`
 - `extraction_common_features_size_bytes`
 - `extraction_common_features_entropy_global`
 - `extraction_common_features_printable_ratio`
@@ -106,15 +112,15 @@ For a dataset containing approximately **10,000 benign and 5,000 suspicious PDFs
 
 ### Practical limitation of the current feature set
 
-Your current fields generally describe **whether an action, token, attachment, or structure exists**, rather than its complete semantics. They do not necessarily reveal:
+The `pdf-v3` fields distinguish action types and trigger contexts and add bounded payload inspection. They still do not establish complete execution semantics. Remaining limits include:
 
 - What JavaScript actually does.
-- Whether an `OpenAction` points to JavaScript, navigation, or something else.
+- Behavior hidden by JavaScript obfuscation beyond the lexical indicators.
 - Where an external URI points, or whether a destination is malicious.
-- What is inside an embedded file.
+- The complete behavior of an attachment or the contents of nested archives.
 - Whether a viewer would perform the requested action.
 
-For catching threats missed by signature-based antivirus, **safe and bounded static inspection of action targets, scripts, URLs, and embedded content** may add more value than additional generic byte statistics. Avoid executing sample content during feature extraction.
+Check structure and payload analysis coverage before interpreting counts. The extractor never executes scripts or attachments, opens URLs, or observes a viewer's behavior.
 
 ## 6. Bottom line
 
