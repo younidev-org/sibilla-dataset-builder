@@ -45,7 +45,7 @@ flowchart LR
 <details>
 <summary><strong>Before using the results</strong></summary>
 
-- `pdf-v2` is still in development; unsupported measurements remain null.
+- `pdf-v3` is still in development; unsupported measurements remain null.
 - Temporal evaluation and million-file external sorting are not available.
 - Related files need meaningful grouping to avoid leakage between splits.
 - Peak memory and storage type are not measured automatically by benchmarks.
@@ -78,10 +78,10 @@ Supply the labels yourself. Input files are read-only; output paths must be new.
 
 ```sh
 sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
-  -o ./datasets/pdf-v2 --split 70:15:15 --seed 42
+  -o ./datasets/pdf-v3 --split 70:15:15 --seed 42
 ```
 
-Open `./datasets/pdf-v2/report.json` to check counts and exclusions. Use `--group-column` when your tables contain meaningful related-file groups.
+Open `./datasets/pdf-v3/report.json` to check counts and exclusions. Use `--group-column` when your tables contain meaningful related-file groups.
 
 ### 3. Inspect the result
 
@@ -98,10 +98,12 @@ Inspection reads every row, reporting labels, statuses, error reasons, missing v
 | I want to… | Add this option |
 | --- | --- |
 | Collect structure without optional decoding | `--stream-mode structural` |
+| Process at most 10,000 files | `--limit 10000` on `extract pdf` |
 | Use four workers | `-j 4` on `extract pdf` |
 | Resume an interrupted extraction | `--resume`, keeping the original input and output arguments |
 | Turn colors off | `--no-color` or `--color never` |
 | Hide progress and status | `--quiet` |
+| Inspect actions, JavaScript and attachment indicators | Default `--stream-mode decoded`; [feature definitions](docs/FEATURE_SCHEMA.md#static-malware-related-measurements-pdf-v3) |
 | Save failed or partial records | `--failures failures.jsonl` |
 | Read command help | `--help` |
 

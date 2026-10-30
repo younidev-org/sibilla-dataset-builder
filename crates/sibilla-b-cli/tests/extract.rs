@@ -171,3 +171,49 @@ fn symlink_following_is_opt_in_and_cycles_stop() {
         assert_eq!(count, if follow { 2 } else { 1 });
     }
 }
+/// Verify capped extraction selects deterministic paths and resume rejects a changed cap.
+#[test]
+fn input_limit_is_deterministic_and_checked_on_resume() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("samples");
+    std::fs::create_dir(&input).unwrap();
+    for name in ["c.pdf", "a.pdf", "b.pdf"] {
+        std::fs::write(input.join(name), b"%PDF-1.7\ninvalid %%EOF").unwrap();
+    }
+    let output = dir.path().join("limited.csv");
+    let run = |limit: &str, resume: bool| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_sibilla-b"));
+        command
+            .args(["--quiet", "extract", "pdf", "--type", "unknown", "-i"])
+            .arg(&input)
+            .arg("-o")
+            .arg(&output)
+            .args(["--limit", limit]);
+        if resume {
+            command.arg("--resume");
+        }
+        command.output().unwrap()
+    };
+    assert!(!run("0", false).status.success());
+    assert!(!output.exists());
+    assert!(run("2", false).status.success());
+    let mut paths = Vec::new();
+    sibilla_b_output::read(&output, sibilla_b_output::extraction_schema(), |row| {
+        paths.push(row["original_relative_path"].as_str().unwrap().to_owned());
+        Ok(())
+    })
+    .unwrap();
+    paths.sort();
+    assert_eq!(paths, ["a.pdf", "b.pdf"]);
+    let original = std::fs::read(&output).unwrap();
+    std::fs::remove_file(&output).unwrap();
+    assert!(run("2", true).status.success());
+    assert_eq!(std::fs::read(&output).unwrap(), original);
+    std::fs::remove_file(&output).unwrap();
+    let changed = run("3", true);
+    assert!(!changed.status.success());
+    assert!(
+        String::from_utf8_lossy(&changed.stderr)
+            .contains("configuration or discovery manifest changed")
+    );
+}

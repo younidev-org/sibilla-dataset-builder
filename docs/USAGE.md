@@ -28,6 +28,7 @@ sibilla-b extract pdf -i ./sample.pdf --type unknown -o ./features/sample.csv
 | `--type benign` | Set label `0` |
 | `--type malicious` | Set label `1` |
 | `--type unknown` | Leave the label null |
+| `--limit 10000` | Process at most 10,000 files, selected in sorted path order |
 | `-j`, `--workers` | Set the number of parser processes |
 | `--stream-mode structural` | Skip optional stream decoding |
 | `--stream-mode decoded` | Attempt bounded decoding (default) |
@@ -38,6 +39,14 @@ sibilla-b extract pdf -i ./sample.pdf --type unknown -o ./features/sample.csv
 
 Input files are opened read-only. Labels are never inferred. Symlinks are skipped unless you opt in; nonregular files are rejected.
 
+### Limit the number of input files
+
+```sh
+sibilla-b extract pdf -i ./samples --type benign -o ./first-10000.parquet --limit 10000
+```
+
+`--limit N` must be positive. Omit it to process every discovered file. Discovery still scans the input tree; the cap applies before hashing and extraction. Files are selected in sorted resolved-path order, not randomly. Non-PDF regular files also count toward the cap and may be rejected during extraction. Status totals describe the selected files. Use the same limit when resuming; changing it requires a new output path. This is a file-count limit; `--max-size-mb` limits each file's byte size.
+
 ### Choose stream measurements
 
 ```sh
@@ -47,10 +56,10 @@ sibilla-b extract pdf -i ./samples --type benign -o ./decoded.parquet --stream-m
 
 `decoded` is the default: attempt bounded decoding and report incomplete coverage as partial.
 `structural` collects byte features, PDF structure, raw stream sizes and filter declarations without decoding streams for optional measurements. The parser may still decode streams needed to read PDF objects.
-Unsupported image codecs do not cause partial status in structural mode; malformed structure can still do so.
+Unsupported image codecs do not cause partial status in structural mode; malformed structure can still do so. Both modes analyze action triggers and reachable objects. Decoded mode also inspects script and attachment payloads statically, before general stream statistics.
 
 Check `stream_decode_status`, coverage and counts before interpreting decoded measurements.
-New extractions use `pdf-v2`. Re-extract old `pdf-v1` inputs to build with this version; use one stream mode across all inputs. Existing checkpoint configurations cannot be reused across schemas or modes.
+New extractions use `pdf-v3`. Re-extract old `pdf-v1`/`pdf-v2` inputs to build with this version; use one stream mode across all inputs. Existing checkpoint configurations cannot be reused across schemas or modes.
 
 ## Resume an interrupted run
 
@@ -91,9 +100,10 @@ sibilla-b inspect ./features/benign.parquet --json
 | `decode_budget_exceeded` | A decoded stream would exceed the remaining budget |
 | `malformed_stream` | A supported decoder could not decode the stream |
 | `invalid_filter_chain` | A filter declaration or parameter reference could not be resolved or interpreted |
+| `malware_analysis_incomplete` | Action/graph traversal or targeted payload analysis was incomplete |
 | `feature_depth_limit` | A feature traversal reached its nesting limit |
 
-Multiple reasons are stored in sorted `|`-separated form and counted separately. Current readers expect `pdf-v2`; use the matching older CLI to inspect older tables, or re-extract with the current version.
+Multiple reasons are stored in sorted `|`-separated form and counted separately. Current readers expect `pdf-v3`; use the matching older CLI to inspect older tables, or re-extract with the current version.
 
 The final extraction summary separates rejected files, timeouts and crashes, and reports reused records, files/second, and error counts.
 
@@ -140,7 +150,7 @@ Final tables are published atomically. Read [security limits](../SECURITY.md) be
 
 ```sh
 sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
-  -o ./datasets/pdf-v2 --split 70:15:15 --seed 42
+  -o ./datasets/pdf-v3 --split 70:15:15 --seed 42
 ```
 
 See [Build a dataset](DATASET_PROTOCOL.md) for grouping, label conflicts, and output files.
@@ -187,3 +197,14 @@ sibilla-b dataset build -i .local/demo/features.parquet \
 - Demonstrates the commands; it is not an evaluation corpus.
 
 The private `.fixtures` directory is optional and not required by CI.
+
+## Inspect malware-related measurements
+
+```sh
+sibilla-b extract pdf -i ./samples --type unknown -o ./analysis.parquet --stream-mode decoded
+sibilla-b inspect ./analysis.parquet --json > ./analysis-report.json
+```
+
+The table contains action-trigger counts, reachable/unreachable objects, broken references, JavaScript lexical indicators, attachment signatures, and URL syntax measurements. `inspect` reports structure and payload analysis coverage. No JavaScript or attachment is executed, and no URL is contacted.
+
+Use `--type benign` or `--type malicious` when producing labeled dataset inputs. Script tokens, embedded executable signatures, and unreachable objects are indicators, not automatic malware labels. See [feature definitions](FEATURE_SCHEMA.md#static-malware-related-measurements-pdf-v3) for coverage and limits.

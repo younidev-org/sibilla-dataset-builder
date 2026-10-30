@@ -13,6 +13,8 @@ Replace `./samples` with your PDF file or folder. `--type` is required. Set it t
 For byte and structural features without optional stream decoding, add `--stream-mode structural`.
 The default `decoded` mode attempts bounded decoding; unsupported image filters can produce partial results while structural features remain available.
 
+Decoded mode also measures action relationships, scripts, attachment signatures and URL syntax without executing content. Inspect structure/payload analysis status before interpreting missing values.
+
 ## Build a dataset
 
 ```sh
@@ -34,6 +36,7 @@ Shows full row counts, labels, statuses, error reasons, missing measurements, de
 
 | Task | Option |
 | --- | --- |
+| Process at most 10,000 files | `--limit 10000` |
 | Choose extraction workers | `-j 4` |
 | Resume extraction with the original arguments | `--resume` |
 | Disable colors | `--no-color` |
@@ -47,8 +50,8 @@ Keep the hidden checkpoint directory beside the output if you need to resume.
 
 - Use a dedicated VM/container for untrusted PDFs. Process restrictions are not complete isolation.
 - The tool never executes or renders samples and never contacts extracted URLs.
-- This is a development implementation; `pdf-v2` is not frozen.
-- Older `pdf-v1` tables/checkpoints require re-extraction to use this version.
+- This is a development implementation; `pdf-v3` is not frozen.
+- Older `pdf-v1`/`pdf-v2` tables/checkpoints require re-extraction to use this version.
 - Partial results contain null measurements. Indicators are not a malware verdict.
 - Remove `sample_id` before training; keep labels, provenance, and quality fields out of predictive inputs.
 

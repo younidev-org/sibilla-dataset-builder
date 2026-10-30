@@ -12,7 +12,7 @@ use std::path::PathBuf;
     version,
     about = "Extract static PDF features and build reproducible datasets offline",
     arg_required_else_help = true,
-    after_help = "Command options used below:\n  -i, --input PATH    PDF file or folder for extraction; feature table for dataset build\n  -o, --output PATH   New output file or dataset directory (existing paths are refused)\n                     Extraction: use .parquet or .csv, or pass --format\n  -j, --workers N     Parallel workers (extract: parsers; dataset: output writers)\n  --type LABEL       benign, malicious, or unknown (required for extraction)\n\nFull command options:\n  sibilla-b extract pdf --help\n  sibilla-b dataset build --help\n  sibilla-b benchmark pdf --help\n\nExamples:\n  sibilla-b extract pdf -i samples -o features.parquet --type benign\n  sibilla-b dataset build -i features.parquet -o datasets/pdf-v1\n  sibilla-b benchmark pdf -i samples --workers 1,2,4\n  sibilla-b --color never extract pdf --help"
+    after_help = "Command options used below:\n  -i, --input PATH    PDF file or folder for extraction; feature table for dataset build\n  -o, --output PATH   New output file or dataset directory (existing paths are refused)\n                     Extraction: use .parquet or .csv, or pass --format\n  -j, --workers N     Parallel workers (extract: parsers; dataset: output writers)\n  --type LABEL       benign, malicious, or unknown (required for extraction)\n\nFull command options:\n  sibilla-b extract pdf --help\n  sibilla-b dataset build --help\n  sibilla-b benchmark pdf --help\n\nExamples:\n  sibilla-b extract pdf -i samples -o features.parquet --type benign\n  sibilla-b dataset build -i features.parquet -o datasets/pdf-v3\n  sibilla-b benchmark pdf -i samples --workers 1,2,4\n  sibilla-b --color never extract pdf --help"
 )]
 struct Cli {
     /// Color output: enabled by default; auto detects terminals
@@ -96,6 +96,9 @@ struct Extract {
     /// New .csv or .parquet file (or set --format); existing paths are refused
     #[arg(short = 'o', long, required_unless_present = "schema_version")]
     output: Option<PathBuf>,
+    /// Process at most N files, selected in sorted path order (N must be positive)
+    #[arg(long)]
+    limit: Option<std::num::NonZeroUsize>,
     /// Parallel parser processes (1–256)
     #[arg(short='j',long, default_value_t = default_workers())]
     workers: usize,

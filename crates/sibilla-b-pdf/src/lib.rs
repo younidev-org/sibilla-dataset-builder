@@ -1,4 +1,5 @@
 //! Static parsing only. Call from a restricted subprocess, never the coordinator.
+mod malware;
 use lopdf::{Document, LoadOptions, Object};
 use sibilla_b_schema::{Extraction, FormatExtractor, Limits, PdfFeatures, SCHEMA_VERSION, Status};
 use std::collections::BTreeMap;
@@ -125,7 +126,15 @@ impl FormatExtractor for PdfExtractor {
                 (Status::Partial, Some("pdf_password_required".into()))
             }
             Ok(doc) => {
+                let analysis = malware::analyze(&doc, limits);
                 let mut reasons = measurements(&doc, &mut features, limits);
+                if analysis.structure_status != "complete" || analysis.payload_status == "partial" {
+                    reasons.insert("malware_analysis_incomplete");
+                }
+                features.catalog_action_reference_count = analysis
+                    .action_count
+                    .map(|_| malware::catalog_action_count(&doc) as usize);
+                features.malware = Some(analysis);
                 features.encrypted = Some(doc.is_encrypted() || doc.was_encrypted());
                 features.page_count = Some(doc.get_pages().len());
                 features.object_count = Some(doc.objects.len());

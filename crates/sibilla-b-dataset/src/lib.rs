@@ -260,6 +260,8 @@ pub fn build(
                         "extraction_format_features_stream_mode"
                             | "extraction_format_features_stream_decode_status"
                             | "extraction_format_features_stream_decode_unsupported_filters"
+                            | "extraction_format_features_malware_structure_status"
+                            | "extraction_format_features_malware_payload_status"
                     ))
         })
         .cloned()

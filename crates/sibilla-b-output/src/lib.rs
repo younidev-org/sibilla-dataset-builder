@@ -71,6 +71,7 @@ pub fn row(record: &Record) -> Result<Row> {
                             | "decode_budget_exceeded"
                             | "malformed_stream"
                             | "feature_depth_limit"
+                            | "malware_analysis_incomplete"
                     )
                 }) =>
         {
@@ -132,6 +133,45 @@ pub fn extraction_schema() -> Arc<Schema> {
         extraction: sibilla_b_schema::Extraction {
             common_features: Some(sibilla_b_common_features::extract(&[])),
             format_features: Some(PdfFeatures {
+                malware: Some(sibilla_b_schema::MalwareFeatures {
+                    structure_status: String::new(),
+                    payload_status: String::new(),
+                    reachable_objects: Some(0),
+                    unreachable_objects: Some(0),
+                    broken_references: Some(0),
+                    max_graph_depth: Some(0),
+                    action_count: Some(0),
+                    javascript_action_count: Some(0),
+                    document_open_javascript_count: Some(0),
+                    additional_javascript_count: Some(0),
+                    annotation_javascript_count: Some(0),
+                    form_javascript_count: Some(0),
+                    uri_action_count: Some(0),
+                    launch_action_count: Some(0),
+                    navigation_action_count: Some(0),
+                    action_linked_attachments: Some(0),
+                    javascript_count: Some(0),
+                    javascript_bytes: Some(0),
+                    javascript_suspicious_api_tokens: Some(0),
+                    javascript_escape_sequences: Some(0),
+                    javascript_long_strings: Some(0),
+                    attachment_count: Some(0),
+                    attachment_decoded_bytes: Some(0),
+                    attachment_pe_signatures: Some(0),
+                    attachment_elf_signatures: Some(0),
+                    attachment_pdf_signatures: Some(0),
+                    attachment_zip_signatures: Some(0),
+                    attachment_script_signatures: Some(0),
+                    attachment_max_decoded_bytes: Some(0),
+                    attachment_executable_signatures: Some(0),
+                    url_count: Some(0),
+                    url_ip_literal_count: Some(0),
+                    url_unusual_scheme_count: Some(0),
+                    url_max_length: Some(0),
+                    payload_attempted_count: Some(0),
+                    payload_decoded_count: Some(0),
+                    payload_failed_count: Some(0),
+                }),
                 stream_mode: Some(String::new()),
                 stream_decode_unsupported_filters: Some(String::new()),
                 stream_decode_status: Some(String::new()),

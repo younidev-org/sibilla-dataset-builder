@@ -2,7 +2,7 @@
 
 [< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
 
-Use the columns as measurements, not a malware verdict. `pdf-v2` is still in development.
+Use the columns as measurements, not a malware verdict. `pdf-v3` is still in development.
 
 ## Start with quality
 
@@ -74,7 +74,7 @@ CSV and Parquet preserve the same typed values, including empty strings. Readers
 
 - Full stream statistics cover every loaded stream, including XRef streams. `supported_decoded_stream_size_*` covers only successfully decoded streams.
 - Missing or empty filter chains mean identity decoding.
-- Explicit decoding shares one aggregate measurement budget across streams.
+- General stream decoding shares one aggregate measurement budget; targeted payload analysis has a separate budget of the same size.
 - Parser-internal decompression is limited per stream; worker memory adds another ceiling.
 - Typed-object counts cover loaded objects with explicit `/Type`, not every historical revision.
 - Raw encoded-name candidates count `#XX` escapes in byte tokens and may include text.
@@ -83,13 +83,13 @@ CSV and Parquet preserve the same typed values, including empty strings. Readers
 | --- | --- |
 | Total historical XRef-table count | Null; the parser merges tables |
 | Duplicate object IDs or inaccessible-object counts | Null; discarded objects cannot be recovered from the loaded map |
-| Document-level JavaScript and catalog action reachability | Null; graph traversal is not implemented |
-| Embedded-only size summaries | Not implemented |
-| Complete revision/action graphs | Not implemented |
+| Legacy document-level JavaScript total | Null; use the new context-specific action counts |
+| Embedded payload summaries | Targeted decoded total/max sizes available; no recursive archive analysis |
+| Historical revisions and arbitrary structural-path vocabulary | Not implemented; action relationships cover the loaded document |
 
 For exact fields, see [`sibilla-b-schema`](../crates/sibilla-b-schema/src/lib.rs) and the [table schema](../crates/sibilla-b-output/src/lib.rs).
 
-### Stream coverage (`pdf-v2`)
+### Stream coverage (`pdf-v3`)
 
 Fields below use the `extraction_format_features_` prefix.
 
@@ -107,3 +107,36 @@ Fields below use the `extraction_format_features_` prefix.
 Counts, coverage and subset statistics are null when decoding is not attempted or unavailable. Subset statistics are null if no stream decoded. Existing `decoded_stream_size_*` and `high_entropy_stream_ratio` still require complete coverage. In structural mode they remain null.
 
 The existing `extraction_parse_status` reports whether PDF structure was parsed independently of decoding status. Mode, decoding status and unsupported filter names stay in the manifest and are excluded from the numeric feature table. Indirect filter and parameter references are resolved with bounded reference traversal.
+
+## Static malware-related measurements (`pdf-v3`)
+
+The prefix for these columns is `extraction_format_features_malware_`.
+
+| Columns | Meaning |
+| --- | --- |
+| `structure_status`, `payload_status` | Structural analysis: complete/partial; payload analysis: complete/partial/not_attempted |
+| `reachable_objects`, `unreachable_objects` | Loaded indirect objects reachable/unreachable from the trailer; unreachable does not mean malicious |
+| `broken_references`, `max_graph_depth` | Missing referenced identities and maximum observed graph traversal depth (not a shortest-path distance) |
+| `action_count`, `javascript_action_count` | Action relationships discovered from trigger entries and Next chains |
+| `document_open_javascript_count` | JavaScript reached through catalog OpenAction chains |
+| `additional_javascript_count` | JavaScript from document/page additional actions |
+| `annotation_javascript_count`, `form_javascript_count` | JavaScript from annotation and form action entries |
+| `uri_action_count`, `launch_action_count`, `navigation_action_count` | Typed URI, Launch, and GoTo/GoToR/GoToE/Named action relationships |
+| `action_linked_attachments` | Action F entries resolving to file specifications with EF dictionaries |
+| `javascript_count`, `javascript_bytes` | Reachable JavaScript action dictionaries carrying JS values, and decoded payload bytes |
+| `javascript_suspicious_api_tokens` | Case-sensitive substring occurrences of eval, unescape, fromCharCode, exportDataObject, launchURL, submitForm, util.printf, Collab, getAnnots |
+| `javascript_escape_sequences`, `javascript_long_strings` | Backslash-x/backslash-u/percent-u sequences and closed quoted runs of at least 256 bytes |
+| `attachment_count` | Embedded-file entries reached via EF; aliases to the same indirect stream within one EF dictionary count once |
+| `attachment_decoded_bytes`, `attachment_max_decoded_bytes` | Total and largest decoded attachment payload |
+| `attachment_*_signatures` | Leading-byte matches for PE (MZ), ELF, PDF, ZIP, and shebang scripts; executable count also includes common Mach-O magic values |
+| `url_count`, `url_ip_literal_count` | Reachable URI string entries and those parsed with literal IPv4/IPv6 hosts |
+| `url_unusual_scheme_count`, `url_max_length` | URI entries outside http/https/mailto (including unparseable values), and maximum stored byte length |
+| `payload_attempted_count`, `payload_decoded_count`, `payload_failed_count` | Targeted script/attachment payload attempts and results |
+
+Traversal is capped at 64 levels and 100,000 visits. Action references are deduplicated per trigger context so cycles terminate; a shared action may count in multiple contexts. Direct dictionaries are inspected as encountered. Counts are observations within the loaded document, not reconstruction of historical revisions or every reader's interpretation. Missing references are counted; an exhausted traversal nulls all measurements rather than publishing incomplete totals.
+
+Structural mode leaves payload byte/signature/lexical measurements and payload attempt counts null. In decoded mode, any failed targeted payload nulls payload-derived aggregate measurements; attempt counts and status remain available. Payload strings with UTF-16 BOMs are normalized for lexical script scanning; reported byte sizes refer to decoded PDF payload bytes before normalization. Lexical counts are not a JavaScript parser, deobfuscator, or behavior verdict. File magic matches do not validate an executable or recursively inspect archives.
+
+Targeted payload decoding and general stream measurement each use their own aggregate `--max-decompressed-mb` budget. Parser-internal decoding and worker memory restrictions still apply. Targeted payloads are inspected first; structural mode does not attempt those payloads. Coverage status strings stay in the manifest, outside the feature table. Use the same mode for all dataset inputs.
+
+`catalog_action_reference_count` now counts the presence of catalog OpenAction and AA entry points (0–2). `document_javascript_action_count` remains unavailable; use the explicit context-specific counts above. The other previously unavailable historical measurements remain null. Old `pdf-v1` and `pdf-v2` tables/checkpoints require re-extraction for this schema.

@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SCHEMA_VERSION: &str = "pdf-v2";
+pub const SCHEMA_VERSION: &str = "pdf-v3";
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CommonFeatures {
     pub sha256: String,
@@ -20,6 +20,7 @@ pub struct CommonFeatures {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct PdfFeatures {
+    pub malware: Option<MalwareFeatures>,
     pub stream_mode: Option<String>,
     pub stream_decode_unsupported_filters: Option<String>,
     pub stream_decode_status: Option<String>,
@@ -137,4 +138,46 @@ pub trait FormatExtractor {
     fn schema_version(&self) -> &'static str;
     /// Extract static format features from bytes under the supplied resource limits.
     fn extract(&self, bytes: &[u8], limits: Limits) -> Extraction;
+}
+
+/// Bounded static analysis; null measurements indicate incomplete or unattempted analysis.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct MalwareFeatures {
+    pub structure_status: String,
+    pub payload_status: String,
+    pub reachable_objects: Option<u64>,
+    pub unreachable_objects: Option<u64>,
+    pub broken_references: Option<u64>,
+    pub max_graph_depth: Option<u64>,
+    pub action_count: Option<u64>,
+    pub javascript_action_count: Option<u64>,
+    pub document_open_javascript_count: Option<u64>,
+    pub additional_javascript_count: Option<u64>,
+    pub annotation_javascript_count: Option<u64>,
+    pub form_javascript_count: Option<u64>,
+    pub uri_action_count: Option<u64>,
+    pub launch_action_count: Option<u64>,
+    pub navigation_action_count: Option<u64>,
+    pub action_linked_attachments: Option<u64>,
+    pub javascript_count: Option<u64>,
+    pub javascript_bytes: Option<u64>,
+    pub javascript_suspicious_api_tokens: Option<u64>,
+    pub javascript_escape_sequences: Option<u64>,
+    pub javascript_long_strings: Option<u64>,
+    pub attachment_count: Option<u64>,
+    pub attachment_decoded_bytes: Option<u64>,
+    pub attachment_pe_signatures: Option<u64>,
+    pub attachment_elf_signatures: Option<u64>,
+    pub attachment_pdf_signatures: Option<u64>,
+    pub attachment_zip_signatures: Option<u64>,
+    pub attachment_script_signatures: Option<u64>,
+    pub attachment_max_decoded_bytes: Option<u64>,
+    pub attachment_executable_signatures: Option<u64>,
+    pub url_count: Option<u64>,
+    pub url_ip_literal_count: Option<u64>,
+    pub url_unusual_scheme_count: Option<u64>,
+    pub url_max_length: Option<u64>,
+    pub payload_attempted_count: Option<u64>,
+    pub payload_decoded_count: Option<u64>,
+    pub payload_failed_count: Option<u64>,
 }

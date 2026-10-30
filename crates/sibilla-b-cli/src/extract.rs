@@ -121,6 +121,10 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
         args.follow_symlinks,
         &mut Default::default(),
     )?;
+    if let Some(limit) = args.limit {
+        files.sort();
+        files.truncate(limit.get());
+    }
     if files.is_empty() {
         bail!("no input files");
     }
@@ -131,7 +135,10 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
         Label::Malicious => Some(1),
         Label::Unknown => None,
     };
-    let manifest = serde_json::json!({"schema":sibilla_b_schema::SCHEMA_VERSION,"version":env!("CARGO_PKG_VERSION"),"input":input,"files":files,"limits":limits,"label":label,"source":args.source,"collection_id":args.collection_id,"recursive":!args.no_recursive,"follow_symlinks":args.follow_symlinks,"format":format});
+    let mut manifest = serde_json::json!({"schema":sibilla_b_schema::SCHEMA_VERSION,"version":env!("CARGO_PKG_VERSION"),"input":input,"files":files,"limits":limits,"label":label,"source":args.source,"collection_id":args.collection_id,"recursive":!args.no_recursive,"follow_symlinks":args.follow_symlinks,"format":format});
+    if let Some(limit) = args.limit {
+        manifest["limit"] = serde_json::json!(limit.get());
+    }
     if !args.resume {
         std::fs::create_dir(&checkpoint).context("checkpoint directory exists; use --resume")?;
     }

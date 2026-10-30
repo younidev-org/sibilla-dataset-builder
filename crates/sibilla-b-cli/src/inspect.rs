@@ -16,10 +16,20 @@ pub fn run(path: &Path, as_json: bool, columns: bool) -> Result<()> {
     let mut samples = Vec::new();
     let mut modes = BTreeMap::<String, u64>::new();
     let mut decoding = BTreeMap::<String, u64>::new();
+    let mut analysis_structure = BTreeMap::<String, u64>::new();
+    let mut analysis_payloads = BTreeMap::<String, u64>::new();
     let mut unsupported_filters = BTreeMap::<String, u64>::new();
     sibilla_b_output::read(path, schema.clone(), |row| {
         rows += 1;
         for (column, counts) in [
+            (
+                "extraction_format_features_malware_structure_status",
+                &mut analysis_structure,
+            ),
+            (
+                "extraction_format_features_malware_payload_status",
+                &mut analysis_payloads,
+            ),
             ("extraction_format_features_stream_mode", &mut modes),
             (
                 "extraction_format_features_stream_decode_status",
@@ -69,7 +79,7 @@ pub fn run(path: &Path, as_json: bool, columns: bool) -> Result<()> {
         }
         Ok(())
     })?;
-    let report = json!({"rows":rows,"columns":schema.fields().len(),"statuses":statuses,"labels":labels,"errors":errors,"missing":missing,"sample_errors":samples,"stream_modes":modes,"stream_decode_statuses":decoding,"unsupported_filters_per_document":unsupported_filters});
+    let report = json!({"rows":rows,"columns":schema.fields().len(),"statuses":statuses,"labels":labels,"errors":errors,"missing":missing,"sample_errors":samples,"malware_structure_statuses":analysis_structure,"malware_payload_statuses":analysis_payloads,"stream_modes":modes,"stream_decode_statuses":decoding,"unsupported_filters_per_document":unsupported_filters});
     if as_json {
         println!("{}", serde_json::to_string_pretty(&report)?);
         return Ok(());
@@ -79,6 +89,8 @@ pub fn run(path: &Path, as_json: bool, columns: bool) -> Result<()> {
         ("Statuses", &statuses),
         ("Labels (0=benign, 1=malicious)", &labels),
         ("Error reasons", &errors),
+        ("Malware structure analysis", &analysis_structure),
+        ("Malware payload analysis", &analysis_payloads),
         ("Stream modes", &modes),
         ("Stream decoding", &decoding),
         ("Unsupported filters (documents)", &unsupported_filters),
