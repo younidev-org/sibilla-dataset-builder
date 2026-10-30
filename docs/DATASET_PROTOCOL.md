@@ -85,3 +85,5 @@ Existing destination directories are refused. Publication is atomic and uses Lin
 With `-j 2` or higher, manifest and feature-table writers run concurrently through bounded queues. The spool is read once for both tables and null statistics. With `-j 1`, tables are written sequentially using two read passes.
 
 There are currently two heavy output tasks, so values above 2 do not add more table writers. Ingestion, deduplication and split assignment remain sequential; more workers do not guarantee maximum CPU use or a faster run on a slow disk.
+
+All inputs must use the current `pdf-v2` schema and the same extraction stream mode. `dataset_metadata.json` records that mode. Older schemas require re-extraction.

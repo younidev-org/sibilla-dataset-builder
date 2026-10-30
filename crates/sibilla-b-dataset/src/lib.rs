@@ -20,6 +20,7 @@ struct Samples {
     duplicates: usize,
     conflicts: usize,
     excluded: usize,
+    stream_mode: Option<Value>,
 }
 impl Samples {
     /// Validate sample metadata, deduplicate identities and enforce label/group consistency.
@@ -74,6 +75,18 @@ impl Samples {
             self.excluded += 1;
             return Ok(());
         }
+        let mode = row
+            .get("extraction_format_features_stream_mode")
+            .cloned()
+            .unwrap_or(Value::Null);
+        if self
+            .stream_mode
+            .as_ref()
+            .is_some_and(|previous| previous != &mode)
+        {
+            bail!("incompatible extraction stream modes");
+        }
+        self.stream_mode = Some(mode);
         if self.quarantined.contains(&id) {
             self.duplicates += 1;
             return Ok(());
@@ -241,7 +254,13 @@ pub fn build(
             f.name() == "sample_id"
                 || (f.name().starts_with("extraction_common_features_")
                     && !f.name().ends_with("sha256"))
-                || f.name().starts_with("extraction_format_features_")
+                || (f.name().starts_with("extraction_format_features_")
+                    && !matches!(
+                        f.name().as_str(),
+                        "extraction_format_features_stream_mode"
+                            | "extraction_format_features_stream_decode_status"
+                            | "extraction_format_features_stream_decode_unsupported_filters"
+                    ))
         })
         .cloned()
         .collect();
@@ -316,7 +335,7 @@ pub fn build(
     write_synced(
         root.join("dataset_metadata.json"),
         serde_json::to_vec_pretty(
-            &json!({"schema":sibilla_b_schema::SCHEMA_VERSION,"extractor_version":env!("CARGO_PKG_VERSION"),"seed":seed,"split":split,"group_column":group,"artifact_sha256":hashes,"strategy":"seeded group allocation with label balancing","identity_column":"sample_id is a join key; remove before training"}),
+            &json!({"schema":sibilla_b_schema::SCHEMA_VERSION,"extractor_version":env!("CARGO_PKG_VERSION"),"seed":seed,"split":split,"group_column":group,"artifact_sha256":hashes,"stream_mode":samples.stream_mode,"strategy":"seeded group allocation with label balancing","identity_column":"sample_id is a join key; remove before training"}),
         )?,
     )?;
     std::fs::File::open(root)?.sync_all()?;
@@ -427,6 +446,27 @@ fn write_synced(path: PathBuf, bytes: Vec<u8>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Verify otherwise compatible inputs cannot mix structural and decoded extraction modes.
+    #[test]
+    fn mixed_stream_modes_are_rejected() {
+        let mut samples = Samples::default();
+        for (index, mode) in ["structural", "decoded"].into_iter().enumerate() {
+            let row = BTreeMap::from([
+                ("sample_id".into(), json!(format!("{index:064x}"))),
+                ("label".into(), json!(0)),
+                ("file_format".into(), json!("pdf")),
+                (
+                    "feature_schema_version".into(),
+                    json!(sibilla_b_schema::SCHEMA_VERSION),
+                ),
+                ("extractor_version".into(), json!(env!("CARGO_PKG_VERSION"))),
+                ("extraction_status".into(), json!("success")),
+                ("extraction_format_features_stream_mode".into(), json!(mode)),
+            ]);
+            let result = samples.add(row, false);
+            assert_eq!(result.is_ok(), index == 0);
+        }
+    }
     /// Verify a failed output writer stops bounded fan-out without overwriting an existing file.
     #[test]
     fn parallel_writer_failure_stops_producer() {

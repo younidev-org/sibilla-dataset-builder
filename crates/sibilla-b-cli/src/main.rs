@@ -84,6 +84,9 @@ enum Label {
 }
 #[derive(Args)]
 struct Extract {
+    /// Collect structure only, or also attempt bounded stream decoding
+    #[arg(long, default_value = "decoded", value_parser = ["structural", "decoded"])]
+    stream_mode: String,
     /// Input file or directory (recursive by default)
     #[arg(short = 'i', long, required_unless_present = "schema_version")]
     input: Option<PathBuf>,

@@ -45,7 +45,7 @@ flowchart LR
 <details>
 <summary><strong>Before using the results</strong></summary>
 
-- `pdf-v1` is still in development; unsupported measurements remain null.
+- `pdf-v2` is still in development; unsupported measurements remain null.
 - Temporal evaluation and million-file external sorting are not available.
 - Related files need meaningful grouping to avoid leakage between splits.
 - Peak memory and storage type are not measured automatically by benchmarks.

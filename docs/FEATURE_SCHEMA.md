@@ -2,7 +2,7 @@
 
 [< Back to Sibilla Dataset Builder](../README.md) • [Documentation Hub](README.md)
 
-Use the columns as measurements, not a malware verdict. `pdf-v1` is still in development.
+Use the columns as measurements, not a malware verdict. `pdf-v2` is still in development.
 
 ## Start with quality
 
@@ -26,7 +26,7 @@ Unavailable measurements stay null. Do not replace them with zero without an exp
 | Unsupported filter or decode budget exceeded | Decoded statistics null; extraction marked partial |
 | Worker killed | Statistics may be unavailable and remain null |
 
-Error codes may contain multiple fixed reasons separated by `|`. `sibilla-b inspect FILE` counts each reason separately; exported column names remain unchanged.
+Error codes may contain multiple fixed reasons separated by a pipe. `sibilla-b inspect FILE` counts each reason separately; exported column names remain unchanged.
 
 ## Choose feature groups
 
@@ -88,3 +88,22 @@ CSV and Parquet preserve the same typed values, including empty strings. Readers
 | Complete revision/action graphs | Not implemented |
 
 For exact fields, see [`sibilla-b-schema`](../crates/sibilla-b-schema/src/lib.rs) and the [table schema](../crates/sibilla-b-output/src/lib.rs).
+
+### Stream coverage (`pdf-v2`)
+
+Fields below use the `extraction_format_features_` prefix.
+
+| Fields | Meaning |
+| --- | --- |
+| `stream_mode` | `structural` or `decoded` |
+| `stream_decode_status` | `not_attempted`, `unavailable`, `complete`, or `partial` |
+| `stream_decode_success_count` | Streams successfully decoded |
+| `stream_decode_unsupported_count` | Streams blocked by unsupported codecs |
+| `stream_decode_unsupported_filters` | Sorted unsupported filter names separated by a pipe |
+| `stream_decode_error_count` | Other stream failures, including decoding budget exhaustion |
+| `stream_decode_coverage_ratio` | Decoded streams / total streams; 1 for an empty stream set |
+| `supported_decoded_stream_size_*` | Size statistics over successfully decoded streams only |
+
+Counts, coverage and subset statistics are null when decoding is not attempted or unavailable. Subset statistics are null if no stream decoded. Existing `decoded_stream_size_*` and `high_entropy_stream_ratio` still require complete coverage. In structural mode they remain null.
+
+The existing `extraction_parse_status` reports whether PDF structure was parsed independently of decoding status. Mode, decoding status and unsupported filter names stay in the manifest and are excluded from the numeric feature table. Indirect filter and parameter references are resolved with bounded reference traversal.

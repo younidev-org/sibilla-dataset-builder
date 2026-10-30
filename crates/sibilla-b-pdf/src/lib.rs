@@ -84,6 +84,14 @@ impl FormatExtractor for PdfExtractor {
             };
         };
         let mut features = PdfFeatures {
+            stream_mode: Some(
+                match limits.stream_mode {
+                    sibilla_b_schema::StreamMode::Structural => "structural",
+                    sibilla_b_schema::StreamMode::Decoded => "decoded",
+                }
+                .into(),
+            ),
+            stream_decode_status: Some("unavailable".into()),
             header_offset: Some(offset),
             version: bytes
                 .get(offset + 5..offset + 8)
@@ -216,6 +224,36 @@ fn uris(object: &Object, depth: usize, urls: &mut Vec<String>) -> bool {
         _ => true,
     }
 }
+/// Resolve stream filter and parameter references with the document's bounded dereferencer.
+fn resolved_stream<'a>(
+    doc: &Document,
+    stream: &'a lopdf::Stream,
+) -> lopdf::Result<std::borrow::Cow<'a, lopdf::Stream>> {
+    let indirect = [b"Filter".as_slice(), b"DecodeParms".as_slice()].iter().any(|key| {
+        stream.dict.get(key).is_ok_and(|v| matches!(v, Object::Reference(_)) || matches!(v, Object::Array(a) if a.iter().any(|v| matches!(v, Object::Reference(_)))))
+    });
+    if !indirect {
+        return Ok(std::borrow::Cow::Borrowed(stream));
+    }
+    let mut result = stream.clone();
+    for key in [b"Filter".as_slice(), b"DecodeParms".as_slice()] {
+        if let Ok(value) = stream.dict.get(key) {
+            let (_, value) = doc.dereference(value)?;
+            let value = if let Object::Array(values) = value {
+                Object::Array(
+                    values
+                        .iter()
+                        .map(|v| doc.dereference(v).map(|(_, v)| v.clone()))
+                        .collect::<lopdf::Result<Vec<_>>>()?,
+                )
+            } else {
+                value.clone()
+            };
+            result.dict.set(key, value);
+        }
+    }
+    Ok(std::borrow::Cow::Owned(result))
+}
 /// Populate available semantic and bounded stream measurements.
 fn measurements(
     doc: &Document,
@@ -246,6 +284,9 @@ fn measurements(
     let mut remaining = limits.max_decompressed_bytes.min(usize::MAX as u64) as usize;
     let mut reasons = std::collections::BTreeSet::new();
     let mut high_entropy = 0;
+    let mut unsupported = 0;
+    let mut unsupported_names = std::collections::BTreeSet::new();
+    let mut decode_errors = 0;
     let mut filters: BTreeMap<String, usize> = [
         "ASCIIHexDecode",
         "ASCII85Decode",
@@ -265,6 +306,14 @@ fn measurements(
     for object in doc.objects.values() {
         if let Object::Stream(stream) = object {
             raw.push(stream.content.len() as f64);
+            let stream = match resolved_stream(doc, stream) {
+                Ok(stream) => stream,
+                Err(_) => {
+                    reasons.insert("invalid_filter_chain");
+                    decode_errors += 1;
+                    continue;
+                }
+            };
             match if stream.dict.has(b"Filter") {
                 stream.filters()
             } else {
@@ -284,7 +333,12 @@ fn measurements(
                 }
                 Err(_) => {
                     reasons.insert("invalid_filter_chain");
+                    decode_errors += 1;
+                    continue;
                 }
+            }
+            if limits.stream_mode == sibilla_b_schema::StreamMode::Structural {
+                continue;
             }
             let identity =
                 !stream.dict.has(b"Filter") || stream.filters().is_ok_and(|chain| chain.is_empty());
@@ -308,17 +362,34 @@ fn measurements(
                     }
                 }
                 Err(lopdf::Error::Unimplemented(_)) => {
+                    unsupported += 1;
+                    for name in stream.filters().unwrap_or_default() {
+                        if !matches!(
+                            name,
+                            b"FlateDecode"
+                                | b"BrotliDecode"
+                                | b"LZWDecode"
+                                | b"ASCII85Decode"
+                                | b"ASCIIHexDecode"
+                                | b"RunLengthDecode"
+                        ) {
+                            unsupported_names.insert(String::from_utf8_lossy(name).into_owned());
+                        }
+                    }
                     reasons.insert("unsupported_stream_filter");
                 }
                 Err(lopdf::Error::Decompress(lopdf::DecompressError::MemoryLimitExceeded {
                     ..
                 })) => {
+                    decode_errors += 1;
                     reasons.insert("decode_budget_exceeded");
                 }
                 Ok(_) => {
+                    decode_errors += 1;
                     reasons.insert("decode_budget_exceeded");
                 }
                 Err(_) => {
+                    decode_errors += 1;
                     reasons.insert("malformed_stream");
                 }
             }
@@ -338,7 +409,36 @@ fn measurements(
         features.suspicious_filter_chain_count = Some(depths.iter().filter(|&&d| d > 3.0).count());
         features.filter_counts = Some(filters);
     }
-    if decoded.len() == raw.len() {
+    if limits.stream_mode == sibilla_b_schema::StreamMode::Structural {
+        features.stream_decode_status = Some("not_attempted".into());
+    } else {
+        features.stream_decode_status = Some(
+            if decoded.len() == raw.len() {
+                "complete"
+            } else {
+                "partial"
+            }
+            .into(),
+        );
+        features.stream_decode_unsupported_filters =
+            Some(unsupported_names.into_iter().collect::<Vec<_>>().join("|"));
+        features.stream_decode_success_count = Some(decoded.len());
+        features.stream_decode_unsupported_count = Some(unsupported);
+        features.stream_decode_error_count = Some(decode_errors);
+        features.stream_decode_coverage_ratio = Some(if raw.is_empty() {
+            1.0
+        } else {
+            decoded.len() as f64 / raw.len() as f64
+        });
+        if !decoded.is_empty() {
+            let (mean, min, max, std) = stats(&decoded);
+            features.supported_decoded_stream_size_mean = Some(mean);
+            features.supported_decoded_stream_size_min = Some(min);
+            features.supported_decoded_stream_size_max = Some(max);
+            features.supported_decoded_stream_size_std = Some(std);
+        }
+    }
+    if limits.stream_mode == sibilla_b_schema::StreamMode::Decoded && decoded.len() == raw.len() {
         let (mean, min, max, std) = stats(&decoded);
         features.decoded_stream_size_mean = Some(mean);
         features.decoded_stream_size_min = Some(min);
@@ -365,6 +465,71 @@ fn measurements(
 #[cfg(test)]
 mod tests {
     use sibilla_b_schema::{FormatExtractor, Limits, Status};
+    /// Verify structural mode skips unsupported image decoding without inventing measurements.
+    #[test]
+    fn structural_mode_keeps_image_structure() {
+        let mut doc = lopdf::Document::new();
+        doc.add_object(lopdf::Stream::new(
+            lopdf::dictionary! {"Filter" => "DCTDecode"},
+            vec![1, 2, 3],
+        ));
+        let mut features = sibilla_b_schema::PdfFeatures::default();
+        let reasons = super::measurements(
+            &doc,
+            &mut features,
+            Limits {
+                stream_mode: sibilla_b_schema::StreamMode::Structural,
+                ..Limits::default()
+            },
+        );
+        assert!(!reasons.contains("unsupported_stream_filter"));
+        assert_eq!(
+            features.stream_decode_status.as_deref(),
+            Some("not_attempted")
+        );
+        assert_eq!(features.filter_counts.unwrap()["DCTDecode"], 1);
+        assert!(features.decoded_stream_size_mean.is_none());
+        assert!(features.stream_decode_coverage_ratio.is_none());
+    }
+    /// Verify mixed streams report subset measurements while full-document statistics stay null.
+    #[test]
+    fn decoding_coverage_is_explicit() {
+        let mut doc = lopdf::Document::new();
+        doc.add_object(lopdf::Stream::new(lopdf::dictionary! {}, vec![1, 2, 3]));
+        doc.add_object(lopdf::Stream::new(
+            lopdf::dictionary! {"Filter" => "DCTDecode"},
+            vec![1, 2, 3],
+        ));
+        let mut f = sibilla_b_schema::PdfFeatures::default();
+        let reasons = super::measurements(&doc, &mut f, Limits::default());
+        assert!(reasons.contains("unsupported_stream_filter"));
+        assert_eq!(f.stream_decode_success_count, Some(1));
+        assert_eq!(f.stream_decode_unsupported_count, Some(1));
+        assert_eq!(f.stream_decode_coverage_ratio, Some(0.5));
+        assert_eq!(
+            f.stream_decode_unsupported_filters.as_deref(),
+            Some("DCTDecode")
+        );
+        assert_eq!(f.supported_decoded_stream_size_mean, Some(3.0));
+        assert!(f.decoded_stream_size_mean.is_none());
+    }
+    /// Verify indirect filters, filter array elements and decode parameters resolve before decoding.
+    #[test]
+    fn indirect_stream_parameters_are_resolved() {
+        let mut doc = lopdf::Document::new();
+        let name = doc.add_object(lopdf::Object::Name(b"ASCIIHexDecode".to_vec()));
+        let array = doc.add_object(lopdf::Object::Array(vec![name.into()]));
+        let params = doc.add_object(lopdf::dictionary! {});
+        doc.add_object(lopdf::Stream::new(
+            lopdf::dictionary! {"Filter" => array, "DecodeParms" => params},
+            b"010203>".to_vec(),
+        ));
+        let mut f = sibilla_b_schema::PdfFeatures::default();
+        let reasons = super::measurements(&doc, &mut f, Limits::default());
+        assert!(!reasons.contains("invalid_filter_chain"));
+        assert_eq!(f.stream_decode_status.as_deref(), Some("complete"));
+        assert_eq!(f.decoded_stream_size_mean, Some(3.0));
+    }
     /// Verify unsupported filters, malformed streams and budget exhaustion have distinct reasons.
     #[test]
     fn measurement_failure_reasons_are_specific() {

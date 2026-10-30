@@ -22,7 +22,7 @@ pub fn run(args: crate::Benchmark, ui: &crate::ui::Ui) -> Result<()> {
         let output = directory.path().join(format!("benchmark-{index}.parquet"));
         let start = Instant::now();
         let status = Command::new(std::env::current_exe()?)
-            .args(["extract", "pdf", "--input"])
+            .args(["extract", "pdf", "--type", "unknown", "--input"])
             .arg(&args.input)
             .arg("--output")
             .arg(&output)

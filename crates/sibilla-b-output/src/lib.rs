@@ -132,6 +132,17 @@ pub fn extraction_schema() -> Arc<Schema> {
         extraction: sibilla_b_schema::Extraction {
             common_features: Some(sibilla_b_common_features::extract(&[])),
             format_features: Some(PdfFeatures {
+                stream_mode: Some(String::new()),
+                stream_decode_unsupported_filters: Some(String::new()),
+                stream_decode_status: Some(String::new()),
+                stream_decode_success_count: Some(0),
+                stream_decode_unsupported_count: Some(0),
+                stream_decode_error_count: Some(0),
+                stream_decode_coverage_ratio: Some(0.0),
+                supported_decoded_stream_size_mean: Some(0.0),
+                supported_decoded_stream_size_min: Some(0.0),
+                supported_decoded_stream_size_max: Some(0.0),
+                supported_decoded_stream_size_std: Some(0.0),
                 header_offset: Some(0),
                 version: Some(String::new()),
                 eof_count: 0,

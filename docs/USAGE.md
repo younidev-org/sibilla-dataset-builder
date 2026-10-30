@@ -171,3 +171,17 @@ sibilla-b dataset build -i .local/demo/features.parquet \
 - Demonstrates the commands; it is not an evaluation corpus.
 
 The private `.fixtures` directory is optional and not required by CI.
+
+### Choose stream measurements
+
+```sh
+sibilla-b extract pdf -i ./samples --type benign -o ./structural.parquet --stream-mode structural
+sibilla-b extract pdf -i ./samples --type benign -o ./decoded.parquet --stream-mode decoded
+```
+
+`decoded` is the default: attempt bounded decoding and report incomplete coverage as partial.
+`structural` collects byte features, PDF structure, raw stream sizes and filter declarations without decoding streams for optional measurements. The parser may still decode streams needed to read PDF objects.
+Unsupported image codecs do not cause partial status in structural mode; malformed structure can still do so.
+
+Check `stream_decode_status`, coverage and counts before interpreting decoded measurements.
+New extractions use `pdf-v2`. Re-extract old `pdf-v1` inputs to build with this version; use one stream mode across all inputs. Existing checkpoint configurations cannot be reused across schemas or modes.

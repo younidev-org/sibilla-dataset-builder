@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SCHEMA_VERSION: &str = "pdf-v1";
+pub const SCHEMA_VERSION: &str = "pdf-v2";
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CommonFeatures {
     pub sha256: String,
@@ -20,6 +20,17 @@ pub struct CommonFeatures {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct PdfFeatures {
+    pub stream_mode: Option<String>,
+    pub stream_decode_unsupported_filters: Option<String>,
+    pub stream_decode_status: Option<String>,
+    pub stream_decode_success_count: Option<usize>,
+    pub stream_decode_unsupported_count: Option<usize>,
+    pub stream_decode_error_count: Option<usize>,
+    pub stream_decode_coverage_ratio: Option<f64>,
+    pub supported_decoded_stream_size_mean: Option<f64>,
+    pub supported_decoded_stream_size_min: Option<f64>,
+    pub supported_decoded_stream_size_max: Option<f64>,
+    pub supported_decoded_stream_size_std: Option<f64>,
     pub header_offset: Option<usize>,
     pub version: Option<String>,
     pub eof_count: usize,
@@ -93,11 +104,20 @@ pub struct Record {
     pub extraction_duration_ms: u64,
     pub extraction: Extraction,
 }
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamMode {
+    Structural,
+    #[default]
+    Decoded,
+}
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Limits {
     pub max_size_bytes: u64,
     pub max_decompressed_bytes: u64,
     pub timeout_seconds: u64,
+    #[serde(default)]
+    pub stream_mode: StreamMode,
 }
 impl Default for Limits {
     /// Return conservative default extraction resource limits.
@@ -106,6 +126,7 @@ impl Default for Limits {
             max_size_bytes: 64 * 1024 * 1024,
             max_decompressed_bytes: 128 * 1024 * 1024,
             timeout_seconds: 30,
+            stream_mode: StreamMode::Decoded,
         }
     }
 }

@@ -94,6 +94,11 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
             .checked_mul(1024 * 1024)
             .context("decompression limit overflow")?,
         timeout_seconds: args.timeout_seconds,
+        stream_mode: if args.stream_mode == "structural" {
+            sibilla_b_schema::StreamMode::Structural
+        } else {
+            sibilla_b_schema::StreamMode::Decoded
+        },
     };
     let parent = output
         .parent()
