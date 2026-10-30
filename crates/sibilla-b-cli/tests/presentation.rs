@@ -55,7 +55,7 @@ fn quiet_extraction_keeps_both_streams_clean() {
     let input = directory.path().join("input.pdf");
     std::fs::write(&input, b"%PDF-1.7\nmalformed %%EOF").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_sibilla-b"))
-        .args(["extract", "pdf", "-i"])
+        .args(["extract", "pdf", "--type", "unknown", "-i"])
         .arg(input)
         .arg("-o")
         .arg(directory.path().join("out.csv"))

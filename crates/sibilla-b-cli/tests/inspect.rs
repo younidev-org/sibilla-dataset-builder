@@ -8,7 +8,7 @@ fn inspect_reports_full_table() {
     let table = dir.path().join("features.parquet");
     assert!(
         Command::new(env!("CARGO_BIN_EXE_sibilla-b"))
-            .args(["--quiet", "extract", "pdf", "-i"])
+            .args(["--quiet", "extract", "pdf", "--type", "unknown", "-i"])
             .arg(&input)
             .arg("-o")
             .arg(&table)
@@ -73,6 +73,8 @@ fn interruption_can_resume() {
         "--no-color",
         "extract",
         "pdf",
+        "--type",
+        "unknown",
         "-i",
         input.to_str().unwrap(),
         "-o",
@@ -125,7 +127,7 @@ fn extraction_summary_separates_rejections() {
     let input = dir.path().join("empty.pdf");
     std::fs::write(&input, b"").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_sibilla-b"))
-        .args(["--no-color", "extract", "pdf", "-i"])
+        .args(["--no-color", "extract", "pdf", "--type", "unknown", "-i"])
         .arg(&input)
         .arg("-o")
         .arg(dir.path().join("out.csv"))

@@ -116,7 +116,7 @@ fn format_override_and_failure_sidecar() {
     let failures = directory.path().join("failures.jsonl");
     assert!(
         Command::new(env!("CARGO_BIN_EXE_sibilla-b"))
-            .args(["extract", "pdf", "--input"])
+            .args(["extract", "pdf", "--type", "unknown", "--input"])
             .arg(&input)
             .arg("--output")
             .arg(&output)
@@ -153,7 +153,7 @@ fn symlink_following_is_opt_in_and_cycles_stop() {
         let output = directory.path().join(format!("out-{follow}.parquet"));
         let mut command = Command::new(env!("CARGO_BIN_EXE_sibilla-b"));
         command
-            .args(["extract", "pdf", "--input"])
+            .args(["extract", "pdf", "--type", "unknown", "--input"])
             .arg(&input)
             .arg("--output")
             .arg(&output)

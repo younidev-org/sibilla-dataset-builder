@@ -12,7 +12,7 @@ use std::path::PathBuf;
     version,
     about = "Extract static PDF features and build reproducible datasets offline",
     arg_required_else_help = true,
-    after_help = "Command options used below:\n  -i, --input PATH    PDF file or folder for extraction; feature table for dataset build\n  -o, --output PATH   New output file or dataset directory (existing paths are refused)\n                     Extraction: use .parquet or .csv, or pass --format\n  -j, --workers N     Parallel workers (extract: parsers; dataset: output writers)\n  --type LABEL       benign, malicious, or unknown (default: unknown)\n\nFull command options:\n  sibilla-b extract pdf --help\n  sibilla-b dataset build --help\n  sibilla-b benchmark pdf --help\n\nExamples:\n  sibilla-b extract pdf -i samples -o features.parquet --type benign\n  sibilla-b dataset build -i features.parquet -o datasets/pdf-v1\n  sibilla-b benchmark pdf -i samples --workers 1,2,4\n  sibilla-b --color never extract pdf --help"
+    after_help = "Command options used below:\n  -i, --input PATH    PDF file or folder for extraction; feature table for dataset build\n  -o, --output PATH   New output file or dataset directory (existing paths are refused)\n                     Extraction: use .parquet or .csv, or pass --format\n  -j, --workers N     Parallel workers (extract: parsers; dataset: output writers)\n  --type LABEL       benign, malicious, or unknown (required for extraction)\n\nFull command options:\n  sibilla-b extract pdf --help\n  sibilla-b dataset build --help\n  sibilla-b benchmark pdf --help\n\nExamples:\n  sibilla-b extract pdf -i samples -o features.parquet --type benign\n  sibilla-b dataset build -i features.parquet -o datasets/pdf-v1\n  sibilla-b benchmark pdf -i samples --workers 1,2,4\n  sibilla-b --color never extract pdf --help"
 )]
 struct Cli {
     /// Color output: enabled by default; auto detects terminals
@@ -62,7 +62,7 @@ enum Command {
 enum Format {
     /// Extract PDF byte, structural and active-content indicators
     #[command(
-        after_help = "Output format:\n  Use an output ending in .parquet or .csv.\n  For a filename without an extension, pass --format parquet or --format csv.\n  Input files are read-only. Output paths must be new.\n\nExamples:\n  sibilla-b extract pdf -i sample.pdf -o features.parquet\n  sibilla-b extract pdf -i benign_pdf_candidates --type benign -o benign_pdf_output.parquet\n  sibilla-b extract pdf -i samples -o features.csv -j 4\n  sibilla-b extract pdf -i samples -o features.parquet --resume"
+        after_help = "Output format:\n  Use an output ending in .parquet or .csv.\n  For a filename without an extension, pass --format parquet or --format csv.\n  Input files are read-only. Output paths must be new.\n\nExamples:\n  sibilla-b extract pdf -i sample.pdf --type unknown -o features.parquet\n  sibilla-b extract pdf -i benign_pdf_candidates --type benign -o benign_pdf_output.parquet\n  sibilla-b extract pdf -i samples --type unknown -o features.csv -j 4\n  sibilla-b extract pdf -i samples --type unknown -o features.parquet --resume"
     )]
     Pdf(Extract),
 }
@@ -87,9 +87,9 @@ struct Extract {
     /// Input file or directory (recursive by default)
     #[arg(short = 'i', long, required_unless_present = "schema_version")]
     input: Option<PathBuf>,
-    /// Explicit label; never inferred from paths or content
-    #[arg(long = "type", value_enum, default_value = "unknown")]
-    label: Label,
+    /// Required explicit label; use unknown for unlabeled extraction
+    #[arg(long = "type", value_enum, required_unless_present = "schema_version")]
+    label: Option<Label>,
     /// New .csv or .parquet file (or set --format); existing paths are refused
     #[arg(short = 'o', long, required_unless_present = "schema_version")]
     output: Option<PathBuf>,
@@ -261,6 +261,34 @@ mod tests {
     fn cli_contract() {
         assert!(Cli::try_parse_from(["sibilla-b", "extract", "pdf", "--schema-version"]).is_ok());
         assert!(Cli::try_parse_from(["sibilla-b", "extract", "pdf"]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "sibilla-b",
+                "extract",
+                "pdf",
+                "-i",
+                "samples",
+                "-o",
+                "out.csv"
+            ])
+            .is_err()
+        );
+        for label in ["benign", "malicious", "unknown"] {
+            assert!(
+                Cli::try_parse_from([
+                    "sibilla-b",
+                    "extract",
+                    "pdf",
+                    "-i",
+                    "samples",
+                    "-o",
+                    "out.csv",
+                    "--type",
+                    label
+                ])
+                .is_ok()
+            );
+        }
         assert!(
             Cli::try_parse_from([
                 "sibilla-b",

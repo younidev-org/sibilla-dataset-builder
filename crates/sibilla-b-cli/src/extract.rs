@@ -121,7 +121,7 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
     }
     let total = files.len();
     discovery.set_message("Validating checkpoints");
-    let label = match args.label {
+    let label = match args.label.context("--type is required for extraction")? {
         Label::Benign => Some(0),
         Label::Malicious => Some(1),
         Label::Unknown => None,

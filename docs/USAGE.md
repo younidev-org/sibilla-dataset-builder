@@ -16,10 +16,10 @@ sibilla-b extract pdf -i ./samples/malicious --type malicious -o ./features/mali
 ### One PDF without a label
 
 ```sh
-sibilla-b extract pdf -i ./sample.pdf -o ./features/sample.csv
+sibilla-b extract pdf -i ./sample.pdf --type unknown -o ./features/sample.csv
 ```
 
-The default label is `unknown`. Unknown rows are saved but excluded from labeled datasets.
+`--type` is required: choose `benign`, `malicious`, or explicitly `unknown`. Unknown rows are saved but excluded from labeled datasets.
 
 | Option | What it does |
 | --- | --- |
