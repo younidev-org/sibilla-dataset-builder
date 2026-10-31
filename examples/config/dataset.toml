@@ -1,29 +1,45 @@
-# Run: sibilla-b dataset build --config dataset.toml
+# Dataset build: edit input.paths and output.path first.
+# Check: sibilla-b config check dataset.toml
+# Run:   sibilla-b dataset build --config dataset.toml
+# Options: docs/CONFIGURATION.md (dataset option table).
+# All relative paths resolve beside this config file.
 config_version = 1
 command = "dataset"
 
 [input]
+# Extracted tables must contain labels; unknown labels are excluded.
+# Keep each 0.6.0 extraction sidecar beside its table.
+# To combine classes: paths = ["./benign.parquet", "./malicious.parquet"]
 paths = ["./features.parquet"]
 
 [output]
+# New directory for features, manifest, splits and reports.
 path = "./dataset"
 
 [runtime]
+# Output writer limit; the build uses at most two concurrent writers.
 workers = 2
+# Color choices: always, auto (terminal-aware), never.
 quiet = false
 color = "always"
 
 [split]
+# Train, validation, test percentages: must total 100.
 percentages = [70, 15, 15]
+# Same inputs/settings/seed reproduce the split allocation.
 seed = 42
+# Keep related samples together; only enable if IDs are populated meaningfully.
 # group_column = "collection_id"
 
 [policy]
-conflict_policy = "error" # Or quarantine contradictory labels.
+# error stops on contradictory labels for the same hash; quarantine excludes them.
+conflict_policy = "error"
 
 [columns]
 # Empty selects all registered predictive feature groups.
+# To narrow features: groups = ["common.entropy", "pdf.actions", "pdf.javascript"]
 groups = []
+# Canonical column IDs, e.g. ["common.entropy_block_std"].
 exclude = []
 
 [aliases]
@@ -32,5 +48,7 @@ exclude = []
 
 [cleanup]
 # Learned from training rows only and applied identically to all samples.
+# Remove columns with no measured training values (null does not mean zero).
 drop_all_null = true
+# Optional: remove columns with only one distinct non-null training value.
 drop_constant = false

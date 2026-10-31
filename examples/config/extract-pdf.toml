@@ -1,40 +1,59 @@
-# Run: sibilla-b extract --config extract-pdf.toml
+# PDF extraction: edit input.path, input.label and output.path first.
+# Check: sibilla-b config check extract-pdf.toml
+# Run:   sibilla-b extract --config extract-pdf.toml
+# Options: docs/CONFIGURATION.md (extraction option table).
 # Relative paths are resolved beside this config, not from your shell directory.
 config_version = 1
 command = "extract"
 
 [input]
+# File or folder to scan.
 path = "./samples"
 format = "pdf"
 # Labels are explicit: benign, malicious, or unknown. Unknown is excluded from datasets.
+# Set benign or malicious when preparing labeled training data.
 label = "unknown"
 # Uncomment to process only the first N files in sorted path order.
 # limit = 10000
+# Include subfolders; symlink targets are skipped unless explicitly enabled.
 recursive = true
 follow_symlinks = false
 
 [output]
+# New output file; existing files are never overwritten.
+# Keep the generated .features.parquet.config.json beside this table.
 path = "./features.parquet"
 # format = "parquet" # Needed only if the output filename lacks a recognized extension.
 # failures = "./failures.jsonl"
 
 [runtime]
+# Parallel parser processes (1–256). More workers need more memory.
 workers = 4
+# Per-file wall-clock limit in seconds.
 timeout_seconds = 30
+# Maximum encoded input size in MiB; this is not a decoded-data budget.
 input_mib = 64
+# Set true to reuse compatible checkpoints from this output path.
 resume = false
+# Hide progress/status only; color: always, auto (terminal-aware), never.
 quiet = false
 color = "always"
 
 [provenance]
 # source = "collection-name"
+# A shared ID means these samples are related; avoid one ID for unrelated files.
 # collection_id = "related-document-group"
 
 [features.common]
+# Omit groups for all defaults; [] disables this namespace.
 groups = ["size", "entropy", "byte_histogram"]
 
 [formats.pdf]
 groups = ["structure", "actions", "javascript", "attachments", "links", "image_metadata", "stream_statistics"]
+# decoded attempts bounded stream decoding; structural skips generic decoding.
+# JavaScript requires actions; other selected analysis can still inspect payloads.
 stream_mode = "decoded"
+# Optional JPEG validation, not a safety verdict; needs image_metadata + decoded.
 decode_images = false
+# Per-stage decoded-byte allowance in MiB, not the worker memory limit.
 decoded_mib = 128

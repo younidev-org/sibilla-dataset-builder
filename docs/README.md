@@ -6,6 +6,8 @@ Pick the task you want to finish.
 
 | I want to… | Guide |
 | --- | --- |
+| Look up extraction options | [Extraction option table](CONFIGURATION.md#extraction-option-table) |
+| Look up dataset options | [Dataset option table](CONFIGURATION.md#dataset-option-table) |
 | Manage settings, feature groups, and column aliases | [Configuration](CONFIGURATION.md) |
 | Extract a PDF or folder | [Extract PDFs](USAGE.md#extract-pdfs) |
 | Choose structural or decoded measurements | [Stream modes](USAGE.md#choose-stream-measurements) |

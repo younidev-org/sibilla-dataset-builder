@@ -37,14 +37,34 @@ Paths in TOML are relative to the TOML file's directory. Relative CLI overrides 
 
 Every config requires `config_version = 1` and `command = "extract"` or `command = "dataset"`. Unknown keys, unsupported versions and wrong-command sections are errors. Only PDF extraction is implemented; `auto`, PE and JavaScript format sections are rejected rather than ignored.
 
-| Section | Settings |
-| --- | --- |
-| `input` | `path`, `format = "pdf"`, explicit `label`, optional positive `limit`, `recursive`, `follow_symlinks` |
-| `output` | New `path`, optional `format = "csv"` or `"parquet"`, optional `failures` JSONL path |
-| `runtime` | `workers` (1–256), positive `timeout_seconds`, positive `input_mib`, `resume`, `quiet`, `color` (always/auto/never) |
-| `provenance` | Optional `source` and `collection_id`; never inferred |
-| `features.common` | `groups`: size, entropy, byte_histogram |
-| `formats.pdf` | `groups`, `stream_mode` (decoded/structural), `decode_images`, positive `decoded_mib` |
+The tables show TOML keys and their CLI equivalents. “Config only” means there is no inline flag. Defaults apply when the key is omitted; templates may set an explicit value instead.
+
+### Extraction option table
+
+| TOML key | Default / allowed values | CLI equivalent | What it controls |
+| --- | --- | --- | --- |
+| `input.path` | Required file or directory | `-i`, `--input` | Files to extract. |
+| `input.format` | `pdf` | `extract pdf` | Parser selection; PDF is currently the only format. |
+| `input.label` | Required: `benign`, `malicious`, `unknown` | `--type` | Assign a label to every input. Unknown samples cannot enter a labeled dataset. |
+| `input.limit` | Omitted: no cap; positive integer | `--limit` | Process the first N sorted paths, not a random sample. Discovery still scans the tree. |
+| `input.recursive` | `true` | `--recursive` / `--no-recursive` | Include subdirectories. |
+| `input.follow_symlinks` | `false` | `--follow-symlinks` / `--no-follow-symlinks` | Allow resolved targets outside the input tree. |
+| `output.path` | Required new file | `-o`, `--output` | Write the feature table; existing paths are refused. |
+| `output.format` | Infer from `.parquet` or `.csv` | `--format` | Explicitly choose `parquet` or `csv` for extensionless paths. |
+| `output.failures` | Omitted: no separate log | `--failures` | JSONL records for partial, failed and rejected inputs. |
+| `runtime.workers` | CPU-based; 1–256 | `-j`, `--workers` | Concurrent parser processes; the template chooses 4. |
+| `runtime.timeout_seconds` | `30`; positive | `--timeout-seconds` | Per-file wall-clock timeout. |
+| `runtime.input_mib` | `64`; positive | `--max-size-mb` | Maximum input file size in MiB. |
+| `runtime.resume` | `false` | `--resume` / `--no-resume` | Reuse compatible checkpoints and validate source hashes. |
+| `runtime.quiet` | `false` | `--quiet` / `--no-quiet` | Hide progress and status messages. |
+| `runtime.color` | `always`; `always`, `auto`, `never` | `--color`; `--no-color` | ANSI colors; `auto` detects terminals, `never` disables colors. |
+| `provenance.source` | Omitted | `--source` | Collection source name, stored as metadata. |
+| `provenance.collection_id` | Omitted | `--collection-id` | Related-document ID, stored as metadata. |
+| `features.common.groups` | All common groups | Config only | Choose `size`, `entropy`, `byte_histogram`; `[]` disables them. |
+| `formats.pdf.groups` | All PDF groups below | Config only | Choose which PDF feature families to measure; `[]` disables them. |
+| `formats.pdf.stream_mode` | `decoded`; `decoded`, `structural` | `--stream-mode` | Attempt generic stream decoding or collect structural measurements. |
+| `formats.pdf.decode_images` | `false` | `--decode-images` / `--no-decode-images` | Attempt bounded JPEG decoding; requires decoded mode and image metadata. |
+| `formats.pdf.decoded_mib` | `128`; positive | `--max-decompressed-mb` | Per-stage decoded-data allowance in MiB. |
 
 PDF groups: `structure`, `actions`, `javascript`, `attachments`, `links`, `image_metadata`, `stream_statistics`. Omitted group lists enable all current groups in that namespace; `groups = []` disables every optional group in that namespace. JavaScript requires actions. JPEG decoding requires image_metadata and decoded mode. Disabled measurements are exported as null; file identity, file validation and worker restrictions remain mandatory. Shared parsing may still support other selected groups.
 
@@ -74,7 +94,28 @@ drop_all_null = true
 drop_constant = false
 ```
 
-Dataset `runtime` supports workers/quiet/color. `split` supports percentages, seed and group_column; `policy.conflict_policy` is error or quarantine. Extraction-only settings are rejected in dataset configs.
+### Dataset option table
+
+Extraction-only settings are rejected in dataset configs. Dataset builds use existing feature tables; they do not parse the original PDFs again.
+
+| TOML key | Default / allowed values | CLI equivalent | What it controls |
+| --- | --- | --- | --- |
+| `input.paths` | Required list of feature tables | Repeat `-i`, `--input` | Merge compatible labeled extractions; retain each extraction sidecar. |
+| `output.path` | Required new directory | `-o`, `--output` | Destination for the dataset artifacts. |
+| `runtime.workers` | CPU-based; 1–256 | `-j`, `--workers` | Writer limit; at most two concurrent writers, not parallel PDF extraction. The template chooses 2. |
+| `runtime.quiet` | `false` | `--quiet` / `--no-quiet` | Hide progress/status. |
+| `runtime.color` | `always`; `always`, `auto`, `never` | `--color`; `--no-color` | Control ANSI colors. |
+| `split.percentages` | `[70, 15, 15]`; total 100 | `--split 70:15:15` | Train, validation and test allocation. Related groups may prevent exact percentages. |
+| `split.seed` | `42` | `--seed` | Reproduce the allocation with the same inputs and settings. |
+| `split.group_column` | Omitted | `--group-column` | Keep samples sharing a metadata group in one partition. Use meaningful group IDs. |
+| `policy.conflict_policy` | `error`; `error`, `quarantine` | `--conflict-policy` | Stop or exclude contradictory labels for identical file hashes. |
+| `columns.groups` | `[]`: all predictive groups | Config only | Select registered groups such as `common.entropy` or `pdf.actions`. |
+| `columns.exclude` | `[]` | Config only | Remove specific features by canonical ID. |
+| `aliases` | No renaming | Config only | Map quoted canonical IDs to exported names. |
+| `cleanup.drop_all_null` | `true` in config builds | Config only | Remove features with no measured values in training rows. |
+| `cleanup.drop_constant` | `false` | Config only | Remove features with one distinct non-null training value. |
+
+Unlike extraction group lists, an empty dataset group list means **all predictive groups**. Dataset selection changes the exported columns; it cannot recover measurements disabled during extraction.
 
 Use canonical IDs for exclusions and alias sources: `extraction_common_features_X` becomes `common.X`, `extraction_format_features_X` becomes `pdf.X`. `inspect --columns` shows the canonical mapping. Columns have registered types, roles, groups, units and missing-value definitions; aliases never change those meanings.
 
