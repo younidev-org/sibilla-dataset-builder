@@ -6,6 +6,7 @@ Pick the task you want to finish.
 
 | I want to… | Guide |
 | --- | --- |
+| Manage settings, feature groups, and column aliases | [Configuration](CONFIGURATION.md) |
 | Extract a PDF or folder | [Extract PDFs](USAGE.md#extract-pdfs) |
 | Choose structural or decoded measurements | [Stream modes](USAGE.md#choose-stream-measurements) |
 | Limit extraction to the first N files | [Input limit](USAGE.md#limit-the-number-of-input-files) |
@@ -26,3 +27,11 @@ Pick the task you want to finish.
 - [Build and test commands](../README.md#development)
 - [Architecture](ARCHITECTURE.md)
 - [Release workflow](RELEASES.md#maintainer-reference)
+
+### 0.6.0 implementation references
+
+- [Config-first design](superpowers/specs/2026-10-31-config-first-0.6.0-design.md)
+- [Implementation plan](superpowers/plans/2026-10-31-config-first-0.6.0.md)
+- [Changelog](../CHANGELOG.md)
+
+The plan records implementation and verification tasks; configuration usage is documented above.

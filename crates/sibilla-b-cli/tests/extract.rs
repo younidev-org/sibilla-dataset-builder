@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 use std::process::Command;
 /// Verify stable feature rows across worker counts and refusal to overwrite outputs.
 #[test]

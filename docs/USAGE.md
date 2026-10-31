@@ -4,6 +4,16 @@
 
 Examples assume `sibilla-b` is on your `PATH`. For a local build, use `target/release/sibilla-b` instead.
 
+## Prefer a config file
+
+```sh
+sibilla-b config init --format pdf -o extract.toml
+sibilla-b config check extract.toml
+sibilla-b extract --config extract.toml
+```
+
+Edit the generated input/output paths and label first. [Configuration](CONFIGURATION.md) covers groups, aliases, overrides, path resolution and reproducible sidecars. The inline commands below remain useful for quick runs.
+
 ## Extract PDFs
 
 ### A folder of labeled files
@@ -19,7 +29,7 @@ sibilla-b extract pdf -i ./samples/malicious --type malicious -o ./features/mali
 sibilla-b extract pdf -i ./sample.pdf --type unknown -o ./features/sample.csv
 ```
 
-`--type` is required: choose `benign`, `malicious`, or explicitly `unknown`. Unknown rows are saved but excluded from labeled datasets.
+A label from the config or `--type` is required: choose `benign`, `malicious`, or explicitly `unknown`. Unknown rows are saved but excluded from labeled datasets.
 
 | Option | What it does |
 | --- | --- |

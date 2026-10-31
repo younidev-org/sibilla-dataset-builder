@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 use clap::ColorChoice;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::{ffi::OsString, io::IsTerminal, time::Duration};

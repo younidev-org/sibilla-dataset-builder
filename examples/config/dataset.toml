@@ -1,0 +1,36 @@
+# Run: sibilla-b dataset build --config dataset.toml
+config_version = 1
+command = "dataset"
+
+[input]
+paths = ["./features.parquet"]
+
+[output]
+path = "./dataset"
+
+[runtime]
+workers = 2
+quiet = false
+color = "always"
+
+[split]
+percentages = [70, 15, 15]
+seed = 42
+# group_column = "collection_id"
+
+[policy]
+conflict_policy = "error" # Or quarantine contradictory labels.
+
+[columns]
+# Empty selects all registered predictive feature groups.
+groups = []
+exclude = []
+
+[aliases]
+# Canonical IDs stay in metadata even when the exported name changes.
+# "common.entropy_global" = "byte_entropy"
+
+[cleanup]
+# Learned from training rows only and applied identically to all samples.
+drop_all_null = true
+drop_constant = false

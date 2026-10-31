@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 //! Fixed typed tables and atomic publication. No partially written final outputs.
 pub mod quality;
+pub mod registry;
 use anyhow::{Context, Result, bail};
 use arrow_array::{
     Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
@@ -525,6 +529,27 @@ pub fn read(
     }
     Ok(())
 }
+/// Flatten selected measurements while keeping identity, provenance, and quality auditable.
+/// Typed extractor placeholders for disabled groups become null only at this table boundary.
+pub fn row_selected(
+    record: &Record,
+    selection: &sibilla_b_schema::profile::FeatureSelection,
+) -> Result<Row> {
+    let mut row = row(record)?;
+    static DESCRIPTORS: std::sync::OnceLock<Vec<registry::FeatureDescriptor>> =
+        std::sync::OnceLock::new();
+    for descriptor in DESCRIPTORS
+        .get_or_init(|| registry::registry().expect("validated built-in feature registry"))
+    {
+        if descriptor.role == registry::FeatureRole::Predictive
+            && !selection.enabled(&descriptor.group)
+        {
+            row.insert(descriptor.exported_name.clone(), Value::Null);
+        }
+    }
+    Ok(row)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

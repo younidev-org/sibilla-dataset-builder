@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 use crate::{Extract, Label};
 use anyhow::{Context, Result, bail};
 use sibilla_b_schema::{Limits, Record, Status};
@@ -53,7 +56,13 @@ fn discover(
     Ok(())
 }
 /// Extract PDFs with supervised workers, validated resume and atomic table publication.
-pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
+pub fn run(mut args: Extract, ui: &crate::ui::Ui) -> Result<()> {
+    if let Some(snapshot) = args.snapshot.as_mut() {
+        snapshot["settings"]["presentation"] =
+            serde_json::json!({"quiet":ui.quiet,"color_enabled":ui.color});
+        snapshot["run_hash"] =
+            serde_json::Value::from(crate::config::fingerprint(&snapshot["settings"])?);
+    }
     let discovery = ui.progress("Discovering files", None);
     if args.workers == 0 || args.workers > 256 || args.timeout_seconds == 0 {
         bail!("workers must be 1..256 and timeout must be positive");
@@ -116,6 +125,20 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
             .context("output file name")?
             .to_string_lossy()
     ));
+    let sidecar = parent.join(format!(
+        ".{}.config.json",
+        output
+            .file_name()
+            .context("output file name")?
+            .to_string_lossy()
+    ));
+    if !args.resume && std::fs::symlink_metadata(&sidecar).is_ok() {
+        bail!("resolved config sidecar already exists; choose a new output path");
+    }
+    let snapshot = args
+        .snapshot
+        .as_ref()
+        .context("resolved extraction settings missing")?;
     let mut files = Vec::new();
     discover(
         &input,
@@ -140,6 +163,8 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
         Label::Unknown => None,
     };
     let mut manifest = serde_json::json!({"schema":sibilla_b_schema::SCHEMA_VERSION,"version":env!("CARGO_PKG_VERSION"),"input":input,"files":files,"limits":limits,"label":label,"source":args.source,"collection_id":args.collection_id,"recursive":!args.no_recursive,"follow_symlinks":args.follow_symlinks,"format":format});
+    manifest["profile_hash"] = snapshot["profile_hash"].clone();
+    manifest["selection"] = serde_json::to_value(&args.selection)?;
     if let Some(limit) = args.limit {
         manifest["limit"] = serde_json::json!(limit.get());
     }
@@ -161,6 +186,27 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
         }
     } else {
         atomic_record(&checkpoint.join("manifest.json"), &manifest)?;
+        atomic_record(&checkpoint.join("resolved_config.json"), snapshot)?;
+    }
+    let recorded_config = checkpoint.join("resolved_config.json");
+    if !recorded_config.exists() {
+        atomic_record(&recorded_config, snapshot)?;
+    }
+    let initial: serde_json::Value =
+        serde_json::from_reader(std::fs::File::open(&recorded_config)?)?;
+    if std::fs::symlink_metadata(&sidecar).is_ok() {
+        if std::fs::symlink_metadata(&sidecar)?
+            .file_type()
+            .is_symlink()
+        {
+            bail!("resolved config sidecar must not be a symlink");
+        }
+        let previous: serde_json::Value = serde_json::from_reader(std::fs::File::open(&sidecar)?)?;
+        if previous != initial {
+            bail!("resolved config sidecar profile mismatch");
+        }
+    } else {
+        publish_config(&sidecar, &initial)?;
     }
     crate::interrupt::install()?;
     let mut pending = Vec::new();
@@ -205,6 +251,7 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
             let jobs = jobs.clone();
             let tx = tx.clone();
             let executable = &executable;
+            let selection = &args.selection;
             scope.spawn(move || {
                 let mut worker = None;
                 loop {
@@ -224,6 +271,7 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
                         let result = active.extract(&sibilla_b_core::Job {
                             path: path.clone(),
                             limits,
+                            selection: selection.clone(),
                         })?;
                         if !active.alive()? {
                             worker = None;
@@ -335,7 +383,7 @@ pub fn run(args: Extract, ui: &crate::ui::Ui) -> Result<()> {
                 *reasons.entry(reason.into()).or_default() += 1;
             }
         }
-        sibilla_b_output::row(&record)
+        sibilla_b_output::row_selected(&record, &args.selection)
     });
     sibilla_b_output::write_with_format(
         &output,
@@ -423,4 +471,19 @@ fn destination(path: &Path) -> Result<PathBuf> {
         .unwrap_or(Path::new("."));
     std::fs::create_dir_all(parent)?;
     Ok(std::fs::canonicalize(parent)?.join(path.file_name().context("output filename")?))
+}
+
+/// Publish initial resolved settings without replacing a concurrent creator's sidecar.
+fn publish_config(path: &Path, value: &serde_json::Value) -> Result<()> {
+    use std::io::Write;
+    let parent = path.parent().context("resolved config parent")?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    serde_json::to_writer_pretty(temporary.as_file_mut(), value)?;
+    temporary.flush()?;
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist_noclobber(path)
+        .context("publish resolved config")?;
+    std::fs::File::open(parent)?.sync_all()?;
+    Ok(())
 }

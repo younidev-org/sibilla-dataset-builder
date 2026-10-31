@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 //! Generate safe PDFs for a reproducible demonstration; never reads external samples.
 use anyhow::{Context, Result};
 use lopdf::{Document, Object, Stream, dictionary};

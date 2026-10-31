@@ -6,7 +6,7 @@
     <a href="https://www.kernel.org/"><img src="https://img.shields.io/badge/Linux-5.6%2B-FCC624?style=for-the-badge&amp;logo=linux&amp;logoColor=black" alt="Platform: Linux 5.6 or newer"></a>
     <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.88%2B-000000?style=for-the-badge&amp;logo=rust&amp;logoColor=white" alt="Rust: 1.88 or newer"></a>
     <a href="https://github.com/younidev-org/sibilla-dataset-builder/releases"><img src="https://img.shields.io/badge/Release-View_Releases-2EA44F?style=for-the-badge" alt="View project releases"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-BSD--3--Clause-2EA44F?style=for-the-badge" alt="License: BSD 3-Clause"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-2EA44F?style=for-the-badge" alt="License: GPL-3.0-or-later"></a>
     <a href="docs/README.md"><img src="https://img.shields.io/badge/Documentation%20Hub-0969DA?style=for-the-badge&amp;logo=mdbook&amp;logoColor=white" alt="Open the Sibilla Dataset Builder documentation hub"></a>
   </p>
 
@@ -65,33 +65,34 @@ Use `sibilla-b` on Linux 5.6+ (x86-64 or AArch64). See [releases](docs/RELEASES.
 
 If you built locally, replace `sibilla-b` below with `target/release/sibilla-b`.
 
-### 1. Extract your PDFs
+### 1. Configure extraction
 
 ```sh
-sibilla-b extract pdf -i ./samples/benign --type benign -o ./features/benign.parquet
-sibilla-b extract pdf -i ./samples/malicious --type malicious -o ./features/malicious.csv
+sibilla-b config init --format pdf -o extract.toml
+sibilla-b config check extract.toml
+sibilla-b extract --config extract.toml
 ```
 
-Supply the labels yourself. Input files are read-only; output paths must be new.
+Edit the generated paths and set `input.label` to benign, malicious, or unknown before running. Paths in TOML resolve beside the config. Inputs are read-only and output paths must be new. See [configuration](docs/CONFIGURATION.md) for feature groups and overrides.
 
 ### 2. Build a dataset
 
 ```sh
-sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv \
-  -o ./datasets/pdf-v5 --split 70:15:15 --seed 42
+sibilla-b config init --command dataset -o dataset.toml
+sibilla-b dataset build --config dataset.toml
 ```
 
-Open `./datasets/pdf-v5/report.json` to check counts and exclusions. Use `--group-column` when your tables contain meaningful related-file groups.
+Edit `input.paths` in the dataset config to combine labeled tables. Check the resulting `report.json`; use meaningful related-file grouping when available. Inline commands such as `sibilla-b extract pdf -i samples --type benign -o features.parquet` remain supported.
 
 ### 3. Inspect the result
 
 ```sh
-sibilla-b inspect ./features/benign.parquet
-sibilla-b inspect ./features/benign.parquet --columns
-sibilla-b inspect ./features/benign.parquet --json
+sibilla-b inspect ./features.parquet
+sibilla-b inspect ./features.parquet --columns
+sibilla-b inspect ./features.parquet --json
 ```
 
-Inspection reads every row, reporting labels, statuses, error reasons, missing values, decoding coverage statuses, unsupported filter names, and up to five sample errors. `--columns` maps shorter display names to the unchanged exported names.
+Inspection reads every row, reporting labels, statuses, error reasons, missing values, decoding coverage statuses, unsupported filter names, and up to five sample errors. `--columns` maps readable names to canonical IDs and exported names.
 
 ### 4. Adjust a run
 
@@ -151,4 +152,4 @@ Choose a guide by task, or browse the complete [documentation hub](docs/README.m
 
 ## License
 
-Distributed under the [BSD 3-Clause License](LICENSE).
+Distributed under the [GNU General Public License v3.0 or later](LICENSE).

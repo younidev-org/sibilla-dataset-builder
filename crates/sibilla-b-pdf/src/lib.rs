@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 //! Static parsing only. Call from a restricted subprocess, never the coordinator.
 mod images;
 mod malware;
@@ -67,7 +70,12 @@ impl FormatExtractor for PdfExtractor {
         SCHEMA_VERSION
     }
     /// Extract static PDF indicators while preserving nulls for unavailable measurements.
-    fn extract(&self, bytes: &[u8], limits: Limits) -> Extraction {
+    fn extract_selected(
+        &self,
+        bytes: &[u8],
+        limits: Limits,
+        selection: &sibilla_b_schema::profile::FeatureSelection,
+    ) -> Extraction {
         if bytes.len() as u64 > limits.max_size_bytes {
             return Extraction {
                 common_features: None,
@@ -76,7 +84,9 @@ impl FormatExtractor for PdfExtractor {
                 error_code: Some("size_limit".into()),
             };
         }
-        let common = Some(sibilla_b_common_features::extract(bytes));
+        let common = Some(sibilla_b_common_features::extract_selected(
+            bytes, selection,
+        ));
         let header = bytes.windows(5).position(|w| w == b"%PDF-");
         let Some(offset) = header.filter(|&o| o < 1024) else {
             return Extraction {
@@ -86,6 +96,14 @@ impl FormatExtractor for PdfExtractor {
                 error_code: Some("invalid_magic".into()),
             };
         };
+        if !selection.groups.iter().any(|g| g.starts_with("pdf.")) {
+            return Extraction {
+                common_features: common,
+                format_features: None,
+                status: Status::Success,
+                error_code: None,
+            };
+        }
         let mut features = PdfFeatures {
             image_decode_enabled: Some(limits.decode_images),
             stream_mode: Some(
@@ -111,10 +129,14 @@ impl FormatExtractor for PdfExtractor {
             object_count: None,
             stream_count: None,
             encrypted: None,
-            raw_tokens: TOKENS
-                .iter()
-                .map(|t| (t.to_string(), count(bytes, format!("/{t}").as_bytes())))
-                .collect(),
+            raw_tokens: if selection.enabled("pdf.structure") {
+                TOKENS
+                    .iter()
+                    .map(|t| (t.to_string(), count(bytes, format!("/{t}").as_bytes())))
+                    .collect()
+            } else {
+                BTreeMap::new()
+            },
             parsed_names: None,
             incremental_update_raw_count: count(bytes, b"/Prev"),
             encoded_name_raw_count: encoded_names(bytes),
@@ -129,16 +151,37 @@ impl FormatExtractor for PdfExtractor {
                 (Status::Partial, Some("pdf_password_required".into()))
             }
             Ok(doc) => {
-                let analysis = malware::analyze(&doc, limits);
-                features.images = Some(images::analyze(&doc, limits));
-                let mut reasons = measurements(&doc, &mut features, limits);
-                if analysis.structure_status != "complete" || analysis.payload_status == "partial" {
-                    reasons.insert("malware_analysis_incomplete");
+                let mut reasons = std::collections::BTreeSet::new();
+                if [
+                    "pdf.structure",
+                    "pdf.actions",
+                    "pdf.javascript",
+                    "pdf.attachments",
+                    "pdf.links",
+                ]
+                .iter()
+                .any(|g| selection.enabled(g))
+                {
+                    let analysis = malware::analyze_selected(&doc, limits, selection);
+                    if analysis.structure_status != "complete"
+                        || analysis.payload_status == "partial"
+                    {
+                        reasons.insert("malware_analysis_incomplete");
+                    }
+                    features.catalog_action_reference_count = analysis
+                        .action_count
+                        .map(|_| malware::catalog_action_count(&doc) as usize);
+                    features.malware = Some(analysis);
                 }
-                features.catalog_action_reference_count = analysis
-                    .action_count
-                    .map(|_| malware::catalog_action_count(&doc) as usize);
-                features.malware = Some(analysis);
+                if selection.enabled("pdf.image_metadata") {
+                    features.images = Some(images::analyze(&doc, limits));
+                }
+                reasons.extend(measurements_selected(
+                    &doc,
+                    &mut features,
+                    limits,
+                    selection,
+                ));
                 features.encrypted = Some(doc.is_encrypted() || doc.was_encrypted());
                 features.page_count = Some(doc.get_pages().len());
                 features.object_count = Some(doc.objects.len());
@@ -149,13 +192,14 @@ impl FormatExtractor for PdfExtractor {
                         .count(),
                 );
                 let mut counts = TOKENS.iter().map(|t| (t.to_string(), 0)).collect();
-                if doc
-                    .objects
-                    .values()
-                    .all(|object| names(object, &mut counts, 0))
+                if (selection.enabled("pdf.structure") || selection.enabled("pdf.actions"))
+                    && doc
+                        .objects
+                        .values()
+                        .all(|object| names(object, &mut counts, 0))
                 {
                     features.parsed_names = Some(counts);
-                } else {
+                } else if selection.enabled("pdf.structure") || selection.enabled("pdf.actions") {
                     reasons.insert("feature_depth_limit");
                 }
                 if reasons.is_empty() {
@@ -267,20 +311,37 @@ fn resolved_stream<'a>(
     }
     Ok(std::borrow::Cow::Owned(result))
 }
-/// Populate available semantic and bounded stream measurements.
+/// Populate all measurement groups for synthetic regression tests.
+#[cfg(test)]
 fn measurements(
     doc: &Document,
     features: &mut PdfFeatures,
     limits: Limits,
 ) -> std::collections::BTreeSet<&'static str> {
+    measurements_selected(
+        doc,
+        features,
+        limits,
+        &sibilla_b_schema::profile::FeatureSelection::default(),
+    )
+}
+/// Compute shared semantic data while skipping unrequested stream and URL traversals.
+fn measurements_selected(
+    doc: &Document,
+    features: &mut PdfFeatures,
+    limits: Limits,
+    selection: &sibilla_b_schema::profile::FeatureSelection,
+) -> std::collections::BTreeSet<&'static str> {
     let catalog = doc.catalog().ok();
     features.catalog_present = Some(catalog.is_some());
     features.metadata_present = catalog.map(|c| c.has(b"Metadata"));
     features.acroform_present = catalog.map(|c| c.has(b"AcroForm"));
-    features.reference_count = doc
-        .objects
-        .values()
-        .try_fold(0, |n, o| Some(n + references(o, 0)?));
+    if selection.enabled("pdf.structure") {
+        features.reference_count = doc
+            .objects
+            .values()
+            .try_fold(0, |n, o| Some(n + references(o, 0)?));
+    }
     let type_count = |name: &[u8]| {
         doc.objects
             .values()
@@ -316,190 +377,198 @@ fn measurements(
     .iter()
     .map(|s| (s.to_string(), 0))
     .collect();
-    let roles = roles::classify(doc);
-    let mut skipped_images = 0;
-    features.declared_image_stream_count = Some(0);
-    features.javascript_stream_count = Some(0);
-    features.attachment_stream_count = Some(0);
-    features.unknown_stream_count = Some(0);
-    features.overlapping_stream_role_count = Some(0);
-    features.image_stream_decode_skipped_count = Some(0);
-    for (id, object) in &doc.objects {
-        if let Object::Stream(stream) = object {
-            let role = roles.as_ref().and_then(|r| r.get(id)).copied().unwrap_or(0);
-            if role & 1 != 0 {
-                *features.declared_image_stream_count.as_mut().unwrap() += 1;
-            }
-            if role & 2 != 0 {
-                *features.javascript_stream_count.as_mut().unwrap() += 1;
-            }
-            if role & 4 != 0 {
-                *features.attachment_stream_count.as_mut().unwrap() += 1;
-            }
-            if role == 0 {
-                *features.unknown_stream_count.as_mut().unwrap() += 1;
-            }
-            if role.count_ones() > 1 {
-                *features.overlapping_stream_role_count.as_mut().unwrap() += 1;
-            }
-            raw.push(stream.content.len() as f64);
-            let stream = match resolved_stream(doc, stream) {
-                Ok(stream) => stream,
-                Err(_) => {
-                    reasons.insert("invalid_filter_chain");
-                    decode_errors += 1;
-                    continue;
+    if selection.enabled("pdf.stream_statistics") {
+        let roles = roles::classify(doc);
+        let mut skipped_images = 0;
+        features.declared_image_stream_count = Some(0);
+        features.javascript_stream_count = Some(0);
+        features.attachment_stream_count = Some(0);
+        features.unknown_stream_count = Some(0);
+        features.overlapping_stream_role_count = Some(0);
+        features.image_stream_decode_skipped_count = Some(0);
+        for (id, object) in &doc.objects {
+            if let Object::Stream(stream) = object {
+                let role = roles.as_ref().and_then(|r| r.get(id)).copied().unwrap_or(0);
+                if role & 1 != 0 {
+                    *features.declared_image_stream_count.as_mut().unwrap() += 1;
                 }
-            };
-            match if stream.dict.has(b"Filter") {
-                stream.filters()
-            } else {
-                Ok(Vec::new())
-            } {
-                Ok(chain) => {
-                    depths.push(chain.len() as f64);
-                    for filter in chain {
-                        let name = std::str::from_utf8(filter).unwrap_or("other");
-                        let key = if filters.contains_key(name) {
-                            name
-                        } else {
-                            "other"
-                        };
-                        *filters.get_mut(key).expect("filter schema") += 1;
+                if role & 2 != 0 {
+                    *features.javascript_stream_count.as_mut().unwrap() += 1;
+                }
+                if role & 4 != 0 {
+                    *features.attachment_stream_count.as_mut().unwrap() += 1;
+                }
+                if role == 0 {
+                    *features.unknown_stream_count.as_mut().unwrap() += 1;
+                }
+                if role.count_ones() > 1 {
+                    *features.overlapping_stream_role_count.as_mut().unwrap() += 1;
+                }
+                raw.push(stream.content.len() as f64);
+                let stream = match resolved_stream(doc, stream) {
+                    Ok(stream) => stream,
+                    Err(_) => {
+                        reasons.insert("invalid_filter_chain");
+                        decode_errors += 1;
+                        continue;
                     }
-                }
-                Err(_) => {
-                    reasons.insert("invalid_filter_chain");
-                    decode_errors += 1;
-                    continue;
-                }
-            }
-            if limits.stream_mode == sibilla_b_schema::StreamMode::Structural {
-                continue;
-            }
-            if roles.is_some() && role == 1 {
-                skipped_images += 1;
-                continue;
-            }
-            let identity =
-                !stream.dict.has(b"Filter") || stream.filters().is_ok_and(|chain| chain.is_empty());
-            let content = if identity {
-                if stream.content.len() <= remaining {
-                    Ok(stream.content.clone())
+                };
+                match if stream.dict.has(b"Filter") {
+                    stream.filters()
                 } else {
-                    Err(lopdf::Error::Decompress(
-                        lopdf::DecompressError::MemoryLimitExceeded { limit: remaining },
-                    ))
-                }
-            } else {
-                stream.decompressed_content_with_limit(remaining)
-            };
-            match content {
-                Ok(bytes) if bytes.len() <= remaining => {
-                    remaining -= bytes.len();
-                    decoded.push(bytes.len() as f64);
-                    if sibilla_b_common_features::extract(&bytes).entropy_global > 7.5 {
-                        high_entropy += 1;
-                    }
-                }
-                Err(lopdf::Error::Unimplemented(_)) => {
-                    unsupported += 1;
-                    for name in stream.filters().unwrap_or_default() {
-                        if !matches!(
-                            name,
-                            b"FlateDecode"
-                                | b"BrotliDecode"
-                                | b"LZWDecode"
-                                | b"ASCII85Decode"
-                                | b"ASCIIHexDecode"
-                                | b"RunLengthDecode"
-                        ) {
-                            unsupported_names.insert(String::from_utf8_lossy(name).into_owned());
+                    Ok(Vec::new())
+                } {
+                    Ok(chain) => {
+                        depths.push(chain.len() as f64);
+                        for filter in chain {
+                            let name = std::str::from_utf8(filter).unwrap_or("other");
+                            let key = if filters.contains_key(name) {
+                                name
+                            } else {
+                                "other"
+                            };
+                            *filters.get_mut(key).expect("filter schema") += 1;
                         }
                     }
-                    reasons.insert("unsupported_stream_filter");
+                    Err(_) => {
+                        reasons.insert("invalid_filter_chain");
+                        decode_errors += 1;
+                        continue;
+                    }
                 }
-                Err(lopdf::Error::Decompress(lopdf::DecompressError::MemoryLimitExceeded {
-                    ..
-                })) => {
-                    decode_errors += 1;
-                    reasons.insert("decode_budget_exceeded");
+                if limits.stream_mode == sibilla_b_schema::StreamMode::Structural {
+                    continue;
                 }
-                Ok(_) => {
-                    decode_errors += 1;
-                    reasons.insert("decode_budget_exceeded");
+                if roles.is_some() && role == 1 {
+                    skipped_images += 1;
+                    continue;
                 }
-                Err(_) => {
-                    decode_errors += 1;
-                    reasons.insert("malformed_stream");
+                let identity = !stream.dict.has(b"Filter")
+                    || stream.filters().is_ok_and(|chain| chain.is_empty());
+                let content = if identity {
+                    if stream.content.len() <= remaining {
+                        Ok(stream.content.clone())
+                    } else {
+                        Err(lopdf::Error::Decompress(
+                            lopdf::DecompressError::MemoryLimitExceeded { limit: remaining },
+                        ))
+                    }
+                } else {
+                    stream.decompressed_content_with_limit(remaining)
+                };
+                match content {
+                    Ok(bytes) if bytes.len() <= remaining => {
+                        remaining -= bytes.len();
+                        decoded.push(bytes.len() as f64);
+                        if sibilla_b_common_features::extract(&bytes).entropy_global > 7.5 {
+                            high_entropy += 1;
+                        }
+                    }
+                    Err(lopdf::Error::Unimplemented(_)) => {
+                        unsupported += 1;
+                        for name in stream.filters().unwrap_or_default() {
+                            if !matches!(
+                                name,
+                                b"FlateDecode"
+                                    | b"BrotliDecode"
+                                    | b"LZWDecode"
+                                    | b"ASCII85Decode"
+                                    | b"ASCIIHexDecode"
+                                    | b"RunLengthDecode"
+                            ) {
+                                unsupported_names
+                                    .insert(String::from_utf8_lossy(name).into_owned());
+                            }
+                        }
+                        reasons.insert("unsupported_stream_filter");
+                    }
+                    Err(lopdf::Error::Decompress(
+                        lopdf::DecompressError::MemoryLimitExceeded { .. },
+                    )) => {
+                        decode_errors += 1;
+                        reasons.insert("decode_budget_exceeded");
+                    }
+                    Ok(_) => {
+                        decode_errors += 1;
+                        reasons.insert("decode_budget_exceeded");
+                    }
+                    Err(_) => {
+                        decode_errors += 1;
+                        reasons.insert("malformed_stream");
+                    }
                 }
             }
         }
-    }
-    features.image_stream_decode_skipped_count = Some(skipped_images);
-    if roles.is_none() {
-        reasons.insert("feature_depth_limit");
-        features.declared_image_stream_count = None;
-        features.javascript_stream_count = None;
-        features.attachment_stream_count = None;
-        features.unknown_stream_count = None;
-        features.overlapping_stream_role_count = None;
-    }
-    let (mean, min, max, std) = stats(&raw);
-    features.raw_stream_size_mean = Some(mean);
-    features.raw_stream_size_min = Some(min);
-    features.raw_stream_size_max = Some(max);
-    features.raw_stream_size_std = Some(std);
-    if depths.len() == raw.len() {
-        let (mean, min, max, std) = stats(&depths);
-        features.filter_depth_mean = Some(mean);
-        features.filter_depth_min = Some(min);
-        features.filter_depth_max = Some(max);
-        features.filter_depth_std = Some(std);
-        features.suspicious_filter_chain_count = Some(depths.iter().filter(|&&d| d > 3.0).count());
-        features.filter_counts = Some(filters);
-    }
-    if limits.stream_mode == sibilla_b_schema::StreamMode::Structural {
-        features.stream_decode_status = Some("not_attempted".into());
-    } else {
-        features.stream_decode_status = Some(
-            if decoded.len() + skipped_images == raw.len() && skipped_images > 0 {
-                "images_not_attempted"
-            } else if decoded.len() == raw.len() {
-                "complete"
-            } else {
-                "partial"
-            }
-            .into(),
-        );
-        features.stream_decode_unsupported_filters =
-            Some(unsupported_names.into_iter().collect::<Vec<_>>().join("|"));
-        features.stream_decode_success_count = Some(decoded.len());
-        features.stream_decode_unsupported_count = Some(unsupported);
-        features.stream_decode_error_count = Some(decode_errors);
-        features.stream_decode_coverage_ratio = Some(if raw.is_empty() {
-            1.0
+        features.image_stream_decode_skipped_count = Some(skipped_images);
+        if roles.is_none() {
+            reasons.insert("feature_depth_limit");
+            features.declared_image_stream_count = None;
+            features.javascript_stream_count = None;
+            features.attachment_stream_count = None;
+            features.unknown_stream_count = None;
+            features.overlapping_stream_role_count = None;
+        }
+        let (mean, min, max, std) = stats(&raw);
+        features.raw_stream_size_mean = Some(mean);
+        features.raw_stream_size_min = Some(min);
+        features.raw_stream_size_max = Some(max);
+        features.raw_stream_size_std = Some(std);
+        if depths.len() == raw.len() {
+            let (mean, min, max, std) = stats(&depths);
+            features.filter_depth_mean = Some(mean);
+            features.filter_depth_min = Some(min);
+            features.filter_depth_max = Some(max);
+            features.filter_depth_std = Some(std);
+            features.suspicious_filter_chain_count =
+                Some(depths.iter().filter(|&&d| d > 3.0).count());
+            features.filter_counts = Some(filters);
+        }
+        if limits.stream_mode == sibilla_b_schema::StreamMode::Structural {
+            features.stream_decode_status = Some("not_attempted".into());
         } else {
-            decoded.len() as f64 / raw.len() as f64
-        });
-        if !decoded.is_empty() {
-            let (mean, min, max, std) = stats(&decoded);
-            features.supported_decoded_stream_size_mean = Some(mean);
-            features.supported_decoded_stream_size_min = Some(min);
-            features.supported_decoded_stream_size_max = Some(max);
-            features.supported_decoded_stream_size_std = Some(std);
+            features.stream_decode_status = Some(
+                if decoded.len() + skipped_images == raw.len() && skipped_images > 0 {
+                    "images_not_attempted"
+                } else if decoded.len() == raw.len() {
+                    "complete"
+                } else {
+                    "partial"
+                }
+                .into(),
+            );
+            features.stream_decode_unsupported_filters =
+                Some(unsupported_names.into_iter().collect::<Vec<_>>().join("|"));
+            features.stream_decode_success_count = Some(decoded.len());
+            features.stream_decode_unsupported_count = Some(unsupported);
+            features.stream_decode_error_count = Some(decode_errors);
+            features.stream_decode_coverage_ratio = Some(if raw.is_empty() {
+                1.0
+            } else {
+                decoded.len() as f64 / raw.len() as f64
+            });
+            if !decoded.is_empty() {
+                let (mean, min, max, std) = stats(&decoded);
+                features.supported_decoded_stream_size_mean = Some(mean);
+                features.supported_decoded_stream_size_min = Some(min);
+                features.supported_decoded_stream_size_max = Some(max);
+                features.supported_decoded_stream_size_std = Some(std);
+            }
         }
-    }
-    if limits.stream_mode == sibilla_b_schema::StreamMode::Decoded && decoded.len() == raw.len() {
-        let (mean, min, max, std) = stats(&decoded);
-        features.decoded_stream_size_mean = Some(mean);
-        features.decoded_stream_size_min = Some(min);
-        features.decoded_stream_size_max = Some(max);
-        features.decoded_stream_size_std = Some(std);
-        features.high_entropy_stream_ratio = Some(high_entropy as f64 / raw.len().max(1) as f64);
+        if limits.stream_mode == sibilla_b_schema::StreamMode::Decoded && decoded.len() == raw.len()
+        {
+            let (mean, min, max, std) = stats(&decoded);
+            features.decoded_stream_size_mean = Some(mean);
+            features.decoded_stream_size_min = Some(min);
+            features.decoded_stream_size_max = Some(max);
+            features.decoded_stream_size_std = Some(std);
+            features.high_entropy_stream_ratio =
+                Some(high_entropy as f64 / raw.len().max(1) as f64);
+        }
+    } else {
+        features.stream_decode_status = Some("not_attempted".into());
     }
     let mut urls = Vec::new();
-    if doc.objects.values().all(|o| uris(o, 0, &mut urls)) {
+    if selection.enabled("pdf.links") && doc.objects.values().all(|o| uris(o, 0, &mut urls)) {
         features.external_uri_count = Some(urls.len());
         let hosts: std::collections::BTreeSet<_> = urls
             .iter()
@@ -508,7 +577,9 @@ fn measurements(
             .collect();
         features.external_host_count = Some(hosts.len());
     }
-    if features.reference_count.is_none() || features.external_uri_count.is_none() {
+    if (selection.enabled("pdf.structure") && features.reference_count.is_none())
+        || (selection.enabled("pdf.links") && features.external_uri_count.is_none())
+    {
         reasons.insert("feature_depth_limit");
     }
     reasons
@@ -738,5 +809,66 @@ mod tests {
         let row = super::PdfExtractor.extract(&bytes, Limits::default());
         assert_eq!(row.status, Status::Success);
         assert_eq!(row.format_features.unwrap().page_count, Some(1));
+    }
+}
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+    use sibilla_b_schema::profile::FeatureSelection;
+    /// Image-only selection must not report exhaustion of an unrequested action graph stage.
+    #[test]
+    fn disabled_graph_is_not_traversed() {
+        let mut doc = Document::new();
+        let mut next = doc.add_object(Object::Null);
+        for _ in 0..80 {
+            next = doc.add_object(lopdf::dictionary! {"Next"=>next});
+        }
+        let root = doc.add_object(lopdf::dictionary! {"Type"=>"Catalog","Metadata"=>next});
+        doc.trailer.set("Root", root);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        let selection = FeatureSelection {
+            groups: std::collections::BTreeSet::from(["pdf.image_metadata".into()]),
+        };
+        let result = PdfExtractor.extract_selected(&bytes, Limits::default(), &selection);
+        assert_eq!(result.status, Status::Success, "{:?}", result.error_code);
+        assert!(result.format_features.unwrap().malware.is_none());
+    }
+}
+#[cfg(test)]
+mod payload_selection_tests {
+    use super::*;
+    use sibilla_b_schema::profile::FeatureSelection;
+    /// Disabled JS and attachment groups must not attempt invalid payload values.
+    #[test]
+    fn disabled_payloads_do_not_create_decode_failures() {
+        let mut doc = Document::new();
+        let invalid = doc.add_object(Object::Integer(42));
+        let action = doc.add_object(lopdf::dictionary! {"S"=>"JavaScript","JS"=>invalid});
+        let file = doc.add_object(
+            lopdf::dictionary! {"Type"=>"Filespec","EF"=>lopdf::dictionary!{"F"=>invalid}},
+        );
+        let root = doc.add_object(
+            lopdf::dictionary! {"Type"=>"Catalog","OpenAction"=>action,"Attachment"=>file},
+        );
+        doc.trailer.set("Root", root);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        assert_eq!(
+            PdfExtractor.extract(&bytes, Limits::default()).status,
+            Status::Partial
+        );
+        let selected = FeatureSelection {
+            groups: std::collections::BTreeSet::from([
+                "pdf.structure".into(),
+                "pdf.actions".into(),
+            ]),
+        };
+        let result = PdfExtractor.extract_selected(&bytes, Limits::default(), &selected);
+        assert_eq!(result.status, Status::Success);
+        let analysis = result.format_features.unwrap().malware.unwrap();
+        assert_eq!(analysis.payload_status, "not_attempted");
+        assert!(analysis.failure_reasons.is_empty());
+        assert!(analysis.javascript_bytes.is_none());
     }
 }

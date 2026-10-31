@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 use std::process::Command;
 /// Run the CLI with captured output and no inherited NO_COLOR setting.
 fn cli(args: &[&str]) -> std::process::Output {

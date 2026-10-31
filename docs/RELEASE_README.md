@@ -2,6 +2,18 @@
 
 Run commands from this extracted directory. Linux x86-64 GNU binary, built on Ubuntu 24.04.
 
+## Prefer a config file
+
+```sh
+./sibilla-b config init --format pdf -o extract.toml
+./sibilla-b config check extract.toml
+./sibilla-b extract --config extract.toml
+./sibilla-b config init --command dataset -o dataset.toml
+./sibilla-b dataset build --config dataset.toml
+```
+
+Edit the generated paths and explicit labels before running. Config paths are relative to the config directory; explicit CLI flags override configured values. Keep the hidden `.OUTPUT.config.json` beside each extracted table. Dataset configs support canonical column selection, aliases and training-only cleanup. The inline examples below remain supported.
+
 ## Extract PDF features
 
 ```sh
@@ -63,4 +75,4 @@ Keep the hidden checkpoint directory beside the output if you need to resume.
 - [Grouping and dataset rules](https://github.com/younidev-org/sibilla-dataset-builder/blob/main/docs/DATASET_PROTOCOL.md)
 - [Security limits](https://github.com/younidev-org/sibilla-dataset-builder/blob/main/SECURITY.md)
 
-Distributed under the BSD 3-Clause License; see the included `LICENSE`.
+Distributed under the GNU General Public License v3.0 or later; see the included `LICENSE`.

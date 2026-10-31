@@ -26,6 +26,7 @@ libc = "0.2"
 
 indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
 console = "0.16"
+toml = { version = "0.8", default-features = false, features = ["parse", "display"] }
 
 [[bin]]
 name = "sibilla-b"

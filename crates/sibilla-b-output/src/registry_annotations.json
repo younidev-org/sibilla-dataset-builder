@@ -1,0 +1,910 @@
+{
+  "collection_id": {
+    "group": "metadata",
+    "role": "metadata",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero.",
+    "explanation": "Each entry describes a column or a repeated family (*). group selects the feature family; role says how the column is used; unit gives its units; missing explains unavailable values. Null means unavailable, not zero. Metadata fields identify samples and record labels, provenance or extraction quality; they are not model inputs."
+  },
+  "extraction_common_features_ascii_ratio": {
+    "group": "common.size",
+    "role": "predictive",
+    "unit": "fraction",
+    "missing": "Fraction of bytes in 0..=127.",
+    "explanation": "Whole-file byte properties, including size, file signatures and character ratios. These do not depend on successful PDF parsing."
+  },
+  "extraction_common_features_byte_histogram_*": {
+    "group": "common.byte_histogram",
+    "role": "predictive",
+    "unit": "",
+    "missing": "256 normalized byte frequencies in decimal byte-value order; empty input yields zeros.",
+    "explanation": "One normalized frequency per byte value: suffixes 000 through 255 represent decimal byte values. These are byte-distribution features, not counts of PDF objects. 256 normalized byte frequencies in decimal byte-value order; empty input yields zeros."
+  },
+  "extraction_common_features_entropy_block_max": {
+    "group": "common.entropy",
+    "role": "predictive",
+    "unit": "bits/byte",
+    "missing": "Maximum block entropy in bits per byte.",
+    "explanation": "Shannon entropy of the whole file and 4096-byte blocks. Higher entropy may reflect compression, encryption or other dense data; it does not establish maliciousness."
+  },
+  "extraction_common_features_entropy_block_mean": {
+    "group": "common.entropy",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Mean entropy of 4096-byte blocks, including a final short block."
+  },
+  "extraction_common_features_entropy_block_min": {
+    "group": "common.entropy",
+    "role": "predictive",
+    "unit": "bits/byte",
+    "missing": "Minimum block entropy in bits per byte."
+  },
+  "extraction_common_features_entropy_block_std": {
+    "group": "common.entropy",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Population standard deviation of block entropy."
+  },
+  "extraction_common_features_entropy_global": {
+    "group": "common.entropy",
+    "role": "predictive",
+    "unit": "bits/byte",
+    "missing": "Whole-file Shannon entropy in bits per byte (0..=8)."
+  },
+  "extraction_common_features_high_entropy_block_ratio": {
+    "group": "common.entropy",
+    "role": "predictive",
+    "unit": "fraction",
+    "missing": "Fraction of blocks whose entropy is strictly greater than 7.5 bits per byte."
+  },
+  "extraction_common_features_magic_present": {
+    "group": "common.size",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "extraction_common_features_printable_ratio": {
+    "group": "common.size",
+    "role": "predictive",
+    "unit": "fraction",
+    "missing": "Fraction of bytes in 32..=126."
+  },
+  "extraction_common_features_sha256": {
+    "group": "common.size",
+    "role": "identity",
+    "unit": "",
+    "missing": "Lowercase SHA-256 of the complete input; an identity/join key, not a predictive feature."
+  },
+  "extraction_common_features_size_bytes": {
+    "group": "common.size",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Length of the original input in bytes."
+  },
+  "extraction_common_features_zero_byte_ratio": {
+    "group": "common.size",
+    "role": "predictive",
+    "unit": "fraction",
+    "missing": "Fraction of input bytes equal to zero."
+  },
+  "extraction_duration_ms": {
+    "group": "metadata",
+    "role": "quality",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "extraction_error_code": {
+    "group": "metadata",
+    "role": "quality",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "extraction_failure_stage": {
+    "group": "metadata",
+    "role": "quality",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "extraction_format_features_acroform_present": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Whether the catalog declares AcroForm; null when the catalog is unavailable.",
+    "explanation": "PDF syntax and object-structure measurements. Raw token counts and parsed object/name counts have different meanings; parsing and traversal limits may leave values unavailable."
+  },
+  "extraction_format_features_attachment_stream_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded indirect streams declared EmbeddedFile or referenced through EF dictionaries."
+  },
+  "extraction_format_features_catalog_action_reference_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Presence count of catalog OpenAction and AA entries (0..=2), not executed actions.",
+    "explanation": "Static action types, triggers and object relationships, including document-open and annotation actions. Counts describe references and reachable relationships without executing actions."
+  },
+  "extraction_format_features_catalog_present": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Whether the loaded document exposes a catalog dictionary."
+  },
+  "extraction_format_features_declared_image_stream_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded streams declaring Subtype Image; this declaration does not establish safety."
+  },
+  "extraction_format_features_decoded_stream_size_max": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Maximum over all loaded decoded streams; null unless coverage is complete (bytes).",
+    "explanation": "Declared stream filters, encoded/decoded sizes and decoding coverage. Declared filters do not prove successful decoding. Skipped or unsupported decoding must not be interpreted as zero decoded content."
+  },
+  "extraction_format_features_decoded_stream_size_mean": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Arithmetic mean over all loaded decoded streams; null unless coverage is complete (bytes)."
+  },
+  "extraction_format_features_decoded_stream_size_min": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Minimum over all loaded decoded streams; null unless coverage is complete (bytes)."
+  },
+  "extraction_format_features_decoded_stream_size_std": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Population standard deviation over all loaded decoded streams; null unless coverage is complete (bytes)."
+  },
+  "extraction_format_features_document_javascript_action_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Unavailable legacy total; use context-specific action counts in malware."
+  },
+  "extraction_format_features_duplicate_object_ids": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Unavailable: duplicate historical definitions cannot be recovered from the loaded map."
+  },
+  "extraction_format_features_embedded_file_count": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded objects explicitly declaring Type EmbeddedFile.",
+    "explanation": "Embedded-file metadata and recovered-payload signatures. Declared filenames and detected signatures are separate evidence; neither guarantees safety."
+  },
+  "extraction_format_features_encoded_name_raw_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Raw #XX hexadecimal escape candidates, potentially including non-name data."
+  },
+  "extraction_format_features_encrypted": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Whether the document remains encrypted or was decrypted during loading."
+  },
+  "extraction_format_features_eof_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Raw occurrences of the %%EOF marker, including occurrences inside stream data."
+  },
+  "extraction_format_features_external_host_count": {
+    "group": "pdf.links",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Distinct parsed URL host strings among discovered URI values.",
+    "explanation": "Static URI and host characteristics. No destinations are contacted, and a suspicious lexical property alone does not establish maliciousness."
+  },
+  "extraction_format_features_external_uri_count": {
+    "group": "pdf.links",
+    "role": "predictive",
+    "unit": "",
+    "missing": "URI string entries found by the bounded loaded-object traversal."
+  },
+  "extraction_format_features_filespec_count": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded objects explicitly declaring Type Filespec."
+  },
+  "extraction_format_features_filter_counts_*": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Declared filter-name occurrences; unrecognized names aggregate under other.",
+    "explanation": "Declared filter-name occurrences; unrecognized names aggregate under other."
+  },
+  "extraction_format_features_filter_depth_max": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Maximum over declared filter-chain lengths; null if any declaration is invalid."
+  },
+  "extraction_format_features_filter_depth_mean": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Arithmetic mean over declared filter-chain lengths; null if any declaration is invalid."
+  },
+  "extraction_format_features_filter_depth_min": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Minimum over declared filter-chain lengths; null if any declaration is invalid."
+  },
+  "extraction_format_features_filter_depth_std": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Population standard deviation over declared filter-chain lengths; null if any declaration is invalid."
+  },
+  "extraction_format_features_header_offset": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Byte offset of the first PDF header, required to be within the first 1024 bytes."
+  },
+  "extraction_format_features_high_entropy_stream_ratio": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "fraction",
+    "missing": "Fraction of all streams above 7.5 decoded bits/byte; null without full decoding coverage."
+  },
+  "extraction_format_features_image_decode_enabled": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Requested JPEG-analysis policy; builders require matching policies across inputs."
+  },
+  "extraction_format_features_image_stream_decode_skipped_count": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Image-only streams intentionally skipped by general decoding; zero in structural mode."
+  },
+  "extraction_format_features_images_budget_exceeded_count": {
+    "group": "pdf.image_metadata",
+    "role": "quality",
+    "unit": "",
+    "missing": "Image attempts rejected by the shared image-stage decoded-byte budget.",
+    "explanation": "Declared image properties and optional bounded JPEG decoding results. A declared or successfully decoded image is not a safety classification."
+  },
+  "extraction_format_features_images_cmyk_count": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Images declaring DeviceCMYK."
+  },
+  "extraction_format_features_images_decode_status": {
+    "group": "pdf.image_metadata",
+    "role": "quality",
+    "unit": "",
+    "missing": "not_attempted, complete, or partial for the independent optional JPEG stage."
+  },
+  "extraction_format_features_images_decoded_bytes": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Total pixel-buffer bytes from successful JPEG decodes only."
+  },
+  "extraction_format_features_images_decoded_count": {
+    "group": "pdf.image_metadata",
+    "role": "quality",
+    "unit": "",
+    "missing": "JPEG images decoded successfully; null when optional image decoding is disabled."
+  },
+  "extraction_format_features_images_dimension_mismatch_count": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Successful JPEGs whose header dimensions differ from PDF declarations."
+  },
+  "extraction_format_features_images_encoded_bytes": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Total stored bytes across declared image streams, before filter decoding."
+  },
+  "extraction_format_features_images_grayscale_count": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Images declaring DeviceGray or CalGray color-space families."
+  },
+  "extraction_format_features_images_image_count": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded streams declaring Subtype Image, regardless of role overlap."
+  },
+  "extraction_format_features_images_image_mask_count": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Images whose direct ImageMask value is true."
+  },
+  "extraction_format_features_images_invalid_data_count": {
+    "group": "pdf.image_metadata",
+    "role": "quality",
+    "unit": "",
+    "missing": "Other image reference/decoder rejections, including unsupported JPEG variants; not proof of corruption."
+  },
+  "extraction_format_features_images_invalid_parameters_count": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Images missing positive dimensions or supported bit depth; JPX may omit bit depth."
+  },
+  "extraction_format_features_images_max_bits_per_component": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Maximum positive declared bit depth; zero if absent from every image."
+  },
+  "extraction_format_features_images_max_declared_height": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "pixels",
+    "missing": "Largest positive declared Height in pixels; zero if none is available."
+  },
+  "extraction_format_features_images_max_declared_width": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "pixels",
+    "missing": "Largest positive declared Width in pixels; zero if none is available."
+  },
+  "extraction_format_features_images_max_decoded_height": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "pixels",
+    "missing": "Maximum successful JPEG-header height in pixels; zero when no decode succeeds."
+  },
+  "extraction_format_features_images_max_decoded_width": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "pixels",
+    "missing": "Maximum successful JPEG-header width in pixels; zero when no decode succeeds."
+  },
+  "extraction_format_features_images_other_color_space_count": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Other, absent, or unrecognized color spaces; profile contents are not interpreted."
+  },
+  "extraction_format_features_images_rgb_count": {
+    "group": "pdf.image_metadata",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Images declaring DeviceRGB or CalRGB color-space families."
+  },
+  "extraction_format_features_images_unsupported_count": {
+    "group": "pdf.image_metadata",
+    "role": "quality",
+    "unit": "",
+    "missing": "Image attempts lacking a supported terminal DCT filter or supported filter prefix."
+  },
+  "extraction_format_features_inaccessible_objects": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Unavailable legacy measurement; use bounded graph diagnostics instead."
+  },
+  "extraction_format_features_incremental_update_raw_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Raw /Prev substring count, not a reconstruction of revision history."
+  },
+  "extraction_format_features_javascript_stream_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded indirect streams referenced through JS entries, including unreachable dictionaries."
+  },
+  "extraction_format_features_linearized": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Whether raw bytes contain /Linearized; not a validation of linearization."
+  },
+  "extraction_format_features_malware_action_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Action relationships reached from known triggers; shared targets can count in multiple contexts."
+  },
+  "extraction_format_features_malware_action_linked_attachments": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Action F entries resolving to file specifications containing EF."
+  },
+  "extraction_format_features_malware_additional_javascript_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "JavaScript relationships reached from page/catalog additional events."
+  },
+  "extraction_format_features_malware_annotation_javascript_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "JavaScript relationships from annotation primary actions or additional events."
+  },
+  "extraction_format_features_malware_annotation_primary_javascript_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "JavaScript action relationships from primary annotation A entries, separate from event AA entries."
+  },
+  "extraction_format_features_malware_attachment_count": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Reachable EF entries; aliases to one indirect target within a single EF dictionary count once."
+  },
+  "extraction_format_features_malware_attachment_decoded_bytes": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Total decoded attachment bytes; null if any targeted payload is incomplete."
+  },
+  "extraction_format_features_malware_attachment_elf_signatures": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Decoded attachments matching the leading ELF signature; no recursive validation."
+  },
+  "extraction_format_features_malware_attachment_executable_signatures": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Leading MZ, ELF, shebang, or common Mach-O signatures; not executable validation."
+  },
+  "extraction_format_features_malware_attachment_max_decoded_bytes": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Largest decoded attachment payload in bytes."
+  },
+  "extraction_format_features_malware_attachment_pdf_signatures": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Decoded attachments matching the leading %PDF- signature; no recursive validation."
+  },
+  "extraction_format_features_malware_attachment_pe_signatures": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Decoded attachments matching the leading MZ signature; no recursive validation."
+  },
+  "extraction_format_features_malware_attachment_script_signatures": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Decoded attachments matching the leading shebang signature; no recursive validation."
+  },
+  "extraction_format_features_malware_attachment_type_mismatch_count": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Recognized PDF/EXE/DLL/ZIP filename extensions disagreeing with decoded leading bytes."
+  },
+  "extraction_format_features_malware_attachment_zip_signatures": {
+    "group": "pdf.attachments",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Decoded attachments matching the leading PK local-file header signature; no recursive validation."
+  },
+  "extraction_format_features_malware_broken_references": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Distinct missing target identities encountered during graph traversal."
+  },
+  "extraction_format_features_malware_document_event_javascript_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "JavaScript action relationships reached from catalog additional events."
+  },
+  "extraction_format_features_malware_document_open_javascript_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "JavaScript reached through catalog OpenAction chains."
+  },
+  "extraction_format_features_malware_failure_reasons": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Sorted pipe-separated analysis diagnostic codes; empty when no limitation was recorded."
+  },
+  "extraction_format_features_malware_form_javascript_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "JavaScript relationships from form primary actions or additional events."
+  },
+  "extraction_format_features_malware_javascript_action_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "JavaScript action relationships reached from known triggers, including Next chains."
+  },
+  "extraction_format_features_malware_javascript_bytes": {
+    "group": "pdf.javascript",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Total successfully decoded script payload bytes before UTF-16 normalization.",
+    "explanation": "Static JavaScript payload and heuristic measurements. Scripts are inspected without execution; incomplete payload recovery limits what can be measured."
+  },
+  "extraction_format_features_malware_javascript_count": {
+    "group": "pdf.javascript",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Reachable JavaScript action dictionaries carrying JS entries, independent of decoding."
+  },
+  "extraction_format_features_malware_javascript_escape_sequences": {
+    "group": "pdf.javascript",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Occurrences of backslash-x, backslash-u, and percent-u lexical sequences."
+  },
+  "extraction_format_features_malware_javascript_long_strings": {
+    "group": "pdf.javascript",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Closed single/double quoted lexical runs of at least 256 bytes after normalization."
+  },
+  "extraction_format_features_malware_javascript_suspicious_api_tokens": {
+    "group": "pdf.javascript",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Case-sensitive substring occurrences of the documented API-token list; no syntax analysis."
+  },
+  "extraction_format_features_malware_launch_action_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Triggered action relationships declaring S Launch."
+  },
+  "extraction_format_features_malware_max_graph_depth": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Maximum depth observed by the visited-set traversal, not a shortest-path graph distance."
+  },
+  "extraction_format_features_malware_navigation_action_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Triggered GoTo, GoToR, GoToE, or Named action relationships."
+  },
+  "extraction_format_features_malware_page_event_javascript_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "JavaScript action relationships reached from page-level additional events."
+  },
+  "extraction_format_features_malware_payload_attempted_count": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Targeted script/attachment decode attempts; null when decoding is disabled or traversal incomplete."
+  },
+  "extraction_format_features_malware_payload_decoded_count": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Successful targeted payload decodes, not an assertion of payload safety."
+  },
+  "extraction_format_features_malware_payload_failed_count": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Failed targeted payload decodes, including type, reference, codec, data, or budget errors."
+  },
+  "extraction_format_features_malware_payload_status": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "complete, partial, or not_attempted for targeted script and attachment decoding."
+  },
+  "extraction_format_features_malware_reachable_objects": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded indirect objects reachable from trailer values."
+  },
+  "extraction_format_features_malware_structure_status": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "complete or partial for bounded graph/action traversal; missing references can still be counted."
+  },
+  "extraction_format_features_malware_unreachable_objects": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded indirect objects not reached from the trailer; not inherently suspicious."
+  },
+  "extraction_format_features_malware_uri_action_count": {
+    "group": "pdf.actions",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Triggered action relationships declaring S URI."
+  },
+  "extraction_format_features_malware_url_count": {
+    "group": "pdf.links",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Reachable URI string entries; repeated values are counted separately."
+  },
+  "extraction_format_features_malware_url_ip_literal_count": {
+    "group": "pdf.links",
+    "role": "predictive",
+    "unit": "",
+    "missing": "URI entries parsed with literal IPv4 or IPv6 hosts."
+  },
+  "extraction_format_features_malware_url_max_length": {
+    "group": "pdf.links",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Maximum stored URI-string length in bytes; no network lookup is performed."
+  },
+  "extraction_format_features_malware_url_unusual_scheme_count": {
+    "group": "pdf.links",
+    "role": "predictive",
+    "unit": "",
+    "missing": "URI entries outside http/https/mailto, including unparseable values."
+  },
+  "extraction_format_features_metadata_present": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Whether the catalog declares Metadata; null when the catalog is unavailable."
+  },
+  "extraction_format_features_object_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Number of objects retained by the parser, not all historical object definitions."
+  },
+  "extraction_format_features_object_stream_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded objects explicitly declaring Type ObjStm."
+  },
+  "extraction_format_features_overlapping_stream_role_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded streams assigned more than one role; these are not skipped as image-only."
+  },
+  "extraction_format_features_page_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Number of pages enumerated from the loaded page tree."
+  },
+  "extraction_format_features_parsed_names_*": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Name-object counts across loaded objects; null if the bounded traversal is incomplete.",
+    "explanation": "Name-object counts across loaded objects; null if the bounded traversal is incomplete."
+  },
+  "extraction_format_features_raw_stream_size_max": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Maximum over all loaded encoded streams (bytes)."
+  },
+  "extraction_format_features_raw_stream_size_mean": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Arithmetic mean over all loaded encoded streams (bytes)."
+  },
+  "extraction_format_features_raw_stream_size_min": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Minimum over all loaded encoded streams (bytes)."
+  },
+  "extraction_format_features_raw_stream_size_std": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Population standard deviation over all loaded encoded streams (bytes)."
+  },
+  "extraction_format_features_raw_tokens_*": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Raw /name substring counts; strings, comments, and encoded data can contribute.",
+    "explanation": "Raw /name substring counts; strings, comments, and encoded data can contribute."
+  },
+  "extraction_format_features_reference_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Reference occurrences across loaded objects; null on traversal exhaustion."
+  },
+  "extraction_format_features_stream_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded stream-object count, including cross-reference streams."
+  },
+  "extraction_format_features_stream_decode_coverage_ratio": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "fraction",
+    "missing": "Successfully decoded streams divided by all loaded streams; 1 for an empty stream set."
+  },
+  "extraction_format_features_stream_decode_error_count": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Other general stream failures, including invalid filter declarations and budget exhaustion."
+  },
+  "extraction_format_features_stream_decode_status": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "General decoding coverage: unavailable, not_attempted, complete, partial, or images_not_attempted."
+  },
+  "extraction_format_features_stream_decode_success_count": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Number of loaded streams successfully decoded by general measurements."
+  },
+  "extraction_format_features_stream_decode_unsupported_count": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Number of general stream attempts blocked by unsupported filters."
+  },
+  "extraction_format_features_stream_decode_unsupported_filters": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Sorted, pipe-separated unsupported filter names; null when decoding is not attempted."
+  },
+  "extraction_format_features_stream_mode": {
+    "group": "pdf.structure",
+    "role": "quality",
+    "unit": "",
+    "missing": "Requested general measurement mode: structural or decoded."
+  },
+  "extraction_format_features_supported_decoded_stream_size_max": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Maximum over the successfully decoded subset only (bytes)."
+  },
+  "extraction_format_features_supported_decoded_stream_size_mean": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Arithmetic mean over the successfully decoded subset only (bytes)."
+  },
+  "extraction_format_features_supported_decoded_stream_size_min": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Minimum over the successfully decoded subset only (bytes)."
+  },
+  "extraction_format_features_supported_decoded_stream_size_std": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Population standard deviation over the successfully decoded subset only (bytes)."
+  },
+  "extraction_format_features_suspicious_filter_chain_count": {
+    "group": "pdf.stream_statistics",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Number of declared filter chains longer than three filters; a heuristic only."
+  },
+  "extraction_format_features_trailing_eof": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "bytes",
+    "missing": "Whether the last non-whitespace bytes end with %%EOF."
+  },
+  "extraction_format_features_unknown_stream_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded streams with no recognized image, script, or attachment role."
+  },
+  "extraction_format_features_version": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Three-character version text following the detected PDF header."
+  },
+  "extraction_format_features_xref_stream_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Loaded objects explicitly declaring Type XRef."
+  },
+  "extraction_format_features_xref_table_count": {
+    "group": "pdf.structure",
+    "role": "predictive",
+    "unit": "",
+    "missing": "Unavailable: the loaded document does not preserve the historical table count."
+  },
+  "extraction_parse_status": {
+    "group": "metadata",
+    "role": "quality",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "extraction_status": {
+    "group": "metadata",
+    "role": "quality",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "extractor_version": {
+    "group": "metadata",
+    "role": "metadata",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "feature_schema_version": {
+    "group": "metadata",
+    "role": "metadata",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "file_format": {
+    "group": "metadata",
+    "role": "metadata",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "label": {
+    "group": "metadata",
+    "role": "label",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "original_relative_path": {
+    "group": "metadata",
+    "role": "metadata",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "sample_id": {
+    "group": "metadata",
+    "role": "identity",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  },
+  "source_dataset": {
+    "group": "metadata",
+    "role": "metadata",
+    "unit": "",
+    "missing": "Unavailable or not applicable; null is distinct from measured zero."
+  }
+}

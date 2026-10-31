@@ -4,6 +4,16 @@
 
 Start with feature tables produced by `extract pdf`.
 
+## Configure a build
+
+```sh
+sibilla-b config init --command dataset -o dataset.toml
+sibilla-b config check dataset.toml
+sibilla-b dataset build --config dataset.toml
+```
+
+Edit input.paths and output.path first. [Configuration](CONFIGURATION.md#dataset-columns-and-aliases) explains selection, aliases and training-only cleanup. Inline builds below remain supported. Copy each new extraction table with its hidden resolved-config sidecar.
+
 ## 1. Combine your labeled tables
 
 ```sh
@@ -19,7 +29,7 @@ sibilla-b dataset build -i ./features/benign.parquet -i ./features/malicious.csv
 | `--seed 42` | Reproduce the same group allocation |
 | `-j`, `--workers` | Output writer limit; 1 runs sequentially, 2 or more allows both table writers |
 
-Tables must match the current PDF format, column schema, schema version, extractor version, and extraction stream mode. Labels must be `0`, `1`, or null; sample identities use lowercase SHA-256 hex.
+Tables must match the PDF/schema contract and extraction feature profile. The reviewed 0.5.0 pdf-v5 legacy profile remains accepted separately; newer tables require their resolved sidecars. Labels must be `0`, `1`, or null; sample identities use lowercase SHA-256 hex.
 
 Current inputs use `pdf-v5`; older tables require re-extraction. Use the same `--stream-mode` for benign and malicious inputs. `dataset_metadata.json` records the mode.
 
@@ -64,6 +74,7 @@ Conflicts include failed records that still carry the same hash. Unknown labels 
 | File | Use it to… |
 | --- | --- |
 | `report.json` | Review class/split counts, exclusions, duplicates, conflicts, and null rates |
+| `resolved_config.json` | Audit the effective build settings and canonical column projection |
 | `dataset_metadata.json` | Record the seed, split strategy, versions, and artifact hashes |
 | `manifest.parquet` | Inspect labels, provenance, and extraction quality |
 | `features.parquet` | Load feature measurements and the `sample_id` join key |

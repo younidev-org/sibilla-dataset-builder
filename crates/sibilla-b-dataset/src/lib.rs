@@ -1,4 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 //! Exact deduplication and deterministic, group-aware dataset assembly.
+pub mod projection;
 use anyhow::{Context, Result, bail};
 use arrow_schema::{DataType, Field, Schema};
 use serde_json::{Value, json};
@@ -29,8 +33,10 @@ impl Samples {
         if row.get("feature_schema_version").and_then(Value::as_str)
             != Some(sibilla_b_schema::SCHEMA_VERSION)
             || row.get("file_format").and_then(Value::as_str) != Some("pdf")
-            || row.get("extractor_version").and_then(Value::as_str)
-                != Some(env!("CARGO_PKG_VERSION"))
+            || !matches!(
+                row.get("extractor_version").and_then(Value::as_str),
+                Some("0.5.0" | "0.6.0")
+            )
         {
             bail!("incompatible format, schema or extractor version");
         }
@@ -234,6 +240,32 @@ pub fn build(
     quarantine: bool,
     workers: usize,
 ) -> Result<()> {
+    build_configured(
+        inputs,
+        output,
+        split,
+        seed,
+        group,
+        quarantine,
+        workers,
+        &projection::ProjectionOptions::default(),
+        None,
+    )
+}
+/// Build with a validated feature projection while retaining complete manifest/split artifacts.
+#[allow(clippy::too_many_arguments)]
+pub fn build_configured(
+    inputs: &[PathBuf],
+    output: &Path,
+    split: [u64; 3],
+    seed: u64,
+    group: Option<&str>,
+    quarantine: bool,
+    workers: usize,
+    projection_options: &projection::ProjectionOptions,
+    resolved_config: Option<&Value>,
+) -> Result<()> {
+    projection::validate(projection_options)?;
     if !(1..=256).contains(&workers) {
         bail!("workers must be 1..256");
     }
@@ -256,9 +288,22 @@ pub fn build(
         ..Samples::default()
     };
     // shortcut: identity/group metadata remains in memory; external sorting is needed for million-sample corpora.
+    let mut expected_profile: Option<Value> = None;
     let mut input_quality = sibilla_b_output::quality::QualitySummary::default();
     for path in inputs {
+        let profile = extraction_profile(path)?;
+        if expected_profile.as_ref().is_some_and(|p| p != &profile) {
+            bail!(
+                "incompatible extraction feature profiles; legacy and configurable profiles cannot be mixed"
+            );
+        }
+        expected_profile = Some(profile.clone());
         sibilla_b_output::read(path, schema.clone(), |row| {
+            if profile.get("legacy_without_snapshot") == Some(&Value::Bool(true))
+                && row.get("extractor_version").and_then(Value::as_str) != Some("0.5.0")
+            {
+                bail!("0.6.0 extraction table requires its resolved .OUTPUT.config.json sidecar");
+            }
             input_quality.observe(&row)?;
             samples.add(row, quarantine)
         })?;
@@ -279,44 +324,26 @@ pub fn build(
     std::fs::create_dir_all(parent)?;
     let staging = tempfile::tempdir_in(parent)?;
     let root = staging.path();
-    let feature_fields: Vec<_> = schema
-        .fields()
-        .iter()
-        .filter(|f| {
-            f.name() == "sample_id"
-                || (f.name().starts_with("extraction_common_features_")
-                    && !f.name().ends_with("sha256"))
-                || (f.name().starts_with("extraction_format_features_")
-                    && !f
-                        .name()
-                        .starts_with("extraction_format_features_stream_decode_")
-                    && !f
-                        .name()
-                        .starts_with("extraction_format_features_malware_payload_")
-                    && !matches!(
-                        f.name().as_str(),
-                        "extraction_format_features_stream_mode"
-                            | "extraction_format_features_image_decode_enabled"
-                            | "extraction_format_features_image_stream_decode_skipped_count"
-                            | "extraction_format_features_images_decoded_count"
-                            | "extraction_format_features_images_unsupported_count"
-                            | "extraction_format_features_images_invalid_data_count"
-                            | "extraction_format_features_images_budget_exceeded_count"
-                            | "extraction_format_features_stream_decode_status"
-                            | "extraction_format_features_stream_decode_unsupported_filters"
-                            | "extraction_format_features_malware_structure_status"
-                            | "extraction_format_features_malware_payload_status"
-                            | "extraction_format_features_malware_failure_reasons"
-                            | "extraction_format_features_images_decode_status"
-                    ))
-        })
-        .cloned()
-        .collect();
+    let projection = projection::learn_projection(
+        samples.records().filter_map(|row| match row {
+            Ok(row)
+                if assignments
+                    .get(row.get("sample_id").and_then(Value::as_str).unwrap_or(""))
+                    .is_some_and(|s| s == "train") =>
+            {
+                Some(Ok(row))
+            }
+            Ok(_) => None,
+            Err(e) => Some(Err(e)),
+        }),
+        projection_options,
+    )?;
     let (null_counts, quality) = write_tables(
         &samples,
         root,
         schema.clone(),
-        Arc::new(Schema::new(feature_fields)),
+        projection.schema()?,
+        Some(&projection),
         workers,
     )?;
     let split_schema = Arc::new(Schema::new(vec![
@@ -354,13 +381,15 @@ pub fn build(
         .iter()
         .map(|(key, count)| (key.clone(), *count as f64 / samples.rows.len() as f64))
         .collect();
-    let report = json!({"input_quality_by_label_source":input_quality.report(),"quality_by_label_source":quality,"samples":samples.rows.len(),"duplicates":samples.duplicates,"conflicts":samples.conflicts,"quarantined_sample_ids":samples.quarantined,"excluded":samples.excluded,"splits":split_counts,"null_counts":null_counts,"null_rates":null_rates,"class_counts_per_split":class_counts});
+    let report = json!({"projection":projection.metadata(),"input_quality_by_label_source":input_quality.report(),"quality_by_label_source":quality,"samples":samples.rows.len(),"duplicates":samples.duplicates,"conflicts":samples.conflicts,"quarantined_sample_ids":samples.quarantined,"excluded":samples.excluded,"splits":split_counts,"null_counts":null_counts,"null_rates":null_rates,"class_counts_per_split":class_counts});
     write_synced(
         root.join("report.json"),
         serde_json::to_vec_pretty(&report)?,
     )?;
+    write_synced(root.join("resolved_config.json"),serde_json::to_vec_pretty(&resolved_config.cloned().unwrap_or_else(||json!({"command":"dataset","projection":projection_options,"split":split,"seed":seed})))?)?;
     let mut hashes = BTreeMap::new();
     for path in [
+        "resolved_config.json",
         "manifest.parquet",
         "features.parquet",
         "splits/train.parquet",
@@ -383,7 +412,7 @@ pub fn build(
     write_synced(
         root.join("dataset_metadata.json"),
         serde_json::to_vec_pretty(
-            &json!({"schema":sibilla_b_schema::SCHEMA_VERSION,"extractor_version":env!("CARGO_PKG_VERSION"),"seed":seed,"split":split,"group_column":group,"artifact_sha256":hashes,"stream_mode":samples.stream_mode,"image_decode_enabled":samples.image_policy,"strategy":"seeded group allocation with label balancing","identity_column":"sample_id is a join key; remove before training"}),
+            &json!({"schema":sibilla_b_schema::SCHEMA_VERSION,"extractor_version":env!("CARGO_PKG_VERSION"),"seed":seed,"split":split,"group_column":group,"artifact_sha256":hashes,"extraction_profile":expected_profile,"stream_mode":samples.stream_mode,"image_decode_enabled":samples.image_policy,"strategy":"seeded group allocation with label balancing","identity_column":"sample_id is a join key; remove before training"}),
         )?,
     )?;
     std::fs::File::open(root)?.sync_all()?;
@@ -413,6 +442,7 @@ fn write_tables(
     root: &Path,
     schema: Arc<Schema>,
     features: Arc<Schema>,
+    projection: Option<&projection::ResolvedProjection>,
     workers: usize,
 ) -> Result<(BTreeMap<String, usize>, Value)> {
     let mut quality = sibilla_b_output::quality::QualitySummary::default();
@@ -429,7 +459,13 @@ fn write_tables(
             Ok(row)
         });
         sibilla_b_output::write(&root.join("manifest.parquet"), schema, rows)?;
-        sibilla_b_output::write(&root.join("features.parquet"), features, samples.records())?;
+        sibilla_b_output::write(
+            &root.join("features.parquet"),
+            features,
+            samples.records().map(|row| {
+                row.map(|row| projection.map_or_else(|| row.clone(), |p| p.row(row.clone())))
+            }),
+        )?;
     } else {
         std::thread::scope(|scope| -> Result<()> {
             let (manifest_tx, manifest_rx) = std::sync::mpsc::sync_channel::<Row>(16);
@@ -445,7 +481,9 @@ fn write_tables(
                 sibilla_b_output::write(
                     &root.join("features.parquet"),
                     features,
-                    features_rx.into_iter().map(Ok),
+                    features_rx.into_iter().map(|row| {
+                        Ok(projection.map_or_else(|| row.clone(), |p| p.row(row.clone())))
+                    }),
                 )
             });
             let produced = (|| -> Result<()> {
@@ -494,6 +532,34 @@ fn write_synced(path: PathBuf, bytes: Vec<u8>) -> Result<()> {
     file.sync_all()?;
     Ok(())
 }
+/// Validate a table's companion feature profile; only reviewed 0.5 full exports may lack one.
+fn extraction_profile(path: &Path) -> Result<Value> {
+    let name = path
+        .file_name()
+        .context("input file name")?
+        .to_string_lossy();
+    let sidecar = path.with_file_name(format!(".{name}.config.json"));
+    if std::fs::symlink_metadata(&sidecar).is_err() {
+        return Ok(
+            json!({"legacy_without_snapshot":true,"schema":"pdf-v5","extractor_version":"0.5.0"}),
+        );
+    }
+    let value: Value = serde_json::from_reader(std::fs::File::open(&sidecar)?)?;
+    let profile = value
+        .get("feature_profile")
+        .context("resolved extraction feature profile missing")?;
+    if profile.get("format").and_then(Value::as_str) != Some("pdf")
+        || profile.get("schema").and_then(Value::as_str) != Some(sibilla_b_schema::SCHEMA_VERSION)
+    {
+        bail!("incompatible extraction profile schema/format");
+    }
+    let hash = format!("{:x}", Sha256::digest(serde_json::to_vec(profile)?));
+    if value.get("profile_hash").and_then(Value::as_str) != Some(hash.as_str()) {
+        bail!("resolved extraction profile hash is invalid");
+    }
+    Ok(profile.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -531,7 +597,7 @@ mod tests {
             ..Samples::default()
         };
         let schema = extraction_schema();
-        assert!(write_tables(&samples, directory.path(), schema.clone(), schema, 4).is_err());
+        assert!(write_tables(&samples, directory.path(), schema.clone(), schema, None, 4).is_err());
         assert_eq!(std::fs::read(existing).unwrap(), b"keep");
     }
     /// Verify label conflicts and inconsistent duplicate group metadata are rejected.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 use sha2::{Digest, Sha256};
 use sibilla_b_schema::CommonFeatures;
 const BLOCK_SIZE: usize = 4096;
@@ -24,13 +27,38 @@ fn entropy(hist: &[f64]) -> f64 {
 }
 /// Compute SHA-256 and finite byte, histogram and block-entropy statistics.
 pub fn extract(bytes: &[u8]) -> CommonFeatures {
-    let hist = histogram(bytes);
-    let blocks: Vec<_> = bytes
+    extract_selected(
+        bytes,
+        &sibilla_b_schema::profile::FeatureSelection::default(),
+    )
+}
+/// Compute selected byte groups while always retaining identity for checkpoint validation.
+pub fn extract_selected(
+    bytes: &[u8],
+    selection: &sibilla_b_schema::profile::FeatureSelection,
+) -> CommonFeatures {
+    let hist = if selection.enabled("common.entropy") || selection.enabled("common.byte_histogram")
+    {
+        histogram(bytes)
+    } else {
+        vec![0.0; 256]
+    };
+    let entropy_bytes = if selection.enabled("common.entropy") {
+        bytes
+    } else {
+        &[]
+    };
+    let blocks: Vec<_> = entropy_bytes
         .chunks(BLOCK_SIZE)
         .map(|b| entropy(&histogram(b)))
         .collect();
     let n = blocks.len().max(1) as f64;
     let mean = blocks.iter().sum::<f64>() / n;
+    let ratio_bytes = if selection.enabled("common.size") {
+        bytes
+    } else {
+        &[]
+    };
     let ratio = |count: usize| count as f64 / bytes.len().max(1) as f64;
     CommonFeatures {
         sha256: format!("{:x}", Sha256::digest(bytes)),
@@ -41,9 +69,14 @@ pub fn extract(bytes: &[u8]) -> CommonFeatures {
         entropy_block_max: blocks.iter().copied().reduce(f64::max).unwrap_or(0.0),
         entropy_block_std: (blocks.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n).sqrt(),
         high_entropy_block_ratio: blocks.iter().filter(|&&x| x > 7.5).count() as f64 / n,
-        zero_byte_ratio: ratio(bytes.iter().filter(|&&b| b == 0).count()),
-        ascii_ratio: ratio(bytes.iter().filter(|b| b.is_ascii()).count()),
-        printable_ratio: ratio(bytes.iter().filter(|&&b| (32..=126).contains(&b)).count()),
+        zero_byte_ratio: ratio(ratio_bytes.iter().filter(|&&b| b == 0).count()),
+        ascii_ratio: ratio(ratio_bytes.iter().filter(|b| b.is_ascii()).count()),
+        printable_ratio: ratio(
+            ratio_bytes
+                .iter()
+                .filter(|&&b| (32..=126).contains(&b))
+                .count(),
+        ),
         byte_histogram: hist,
     }
 }

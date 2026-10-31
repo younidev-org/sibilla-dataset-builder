@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 //! Conservative stream roles from declarations and references, without payload execution.
 //!
 //! Roles are flags: image = 1, JavaScript = 2, attachment = 4. Zero means unrecognized;

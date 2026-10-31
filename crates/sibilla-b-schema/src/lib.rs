@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 //! Versioned records shared by extraction workers, table writers, and dataset builders.
 //!
 //! Labels and provenance are supplied by the caller, never inferred by an extractor.
 //! Optional measurements distinguish unavailable values (`None`) from measured zeros.
 //! Coverage/status fields describe analysis completeness, not a malware verdict.
 //! Changing field types, meanings, or the exported column set requires a schema version bump.
+pub mod profile;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -276,7 +280,16 @@ pub trait FormatExtractor {
     /// Return the version of the emitted feature schema.
     fn schema_version(&self) -> &'static str;
     /// Extract static format features from bytes under the supplied resource limits.
-    fn extract(&self, bytes: &[u8], limits: Limits) -> Extraction;
+    fn extract(&self, bytes: &[u8], limits: Limits) -> Extraction {
+        self.extract_selected(bytes, limits, &profile::FeatureSelection::default())
+    }
+    /// Extract only validated requested groups; identity and input checks remain mandatory.
+    fn extract_selected(
+        &self,
+        bytes: &[u8],
+        limits: Limits,
+        selection: &profile::FeatureSelection,
+    ) -> Extraction;
 }
 
 /// Bounded static analysis; null measurements indicate incomplete or unattempted analysis.

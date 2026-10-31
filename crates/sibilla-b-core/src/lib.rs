@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 //! Worker protocol and OS restrictions. The coordinator never parses PDFs.
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -10,6 +13,8 @@ use std::{
 pub struct Job {
     pub path: PathBuf,
     pub limits: Limits,
+    #[serde(default)]
+    pub selection: sibilla_b_schema::profile::FeatureSelection,
 }
 /// Restrict the already-started worker before it sees any input.
 #[cfg(target_os = "linux")]
@@ -132,6 +137,10 @@ pub fn worker_loop(extractor: impl FormatExtractor) -> Result<()> {
     let mut stdout = std::io::stdout().lock();
     for line in stdin.lock().lines() {
         let job: Job = serde_json::from_str(&line?)?;
+        job.selection.validate(
+            job.limits.decode_images,
+            job.limits.stream_mode == sibilla_b_schema::StreamMode::Structural,
+        )?;
         set_cpu_budget(job.limits.timeout_seconds)?;
         let result = read_and_extract(&job, &extractor);
         serde_json::to_writer(&mut stdout, &result)?;
@@ -209,7 +218,7 @@ fn read_and_extract(job: &Job, extractor: &impl FormatExtractor) -> Extraction {
         Ok(bytes)
     })();
     match result {
-        Ok(bytes) => extractor.extract(&bytes, job.limits),
+        Ok(bytes) => extractor.extract_selected(&bytes, job.limits, &job.selection),
         Err(_) => rejected("input_read_failed"),
     }
 }

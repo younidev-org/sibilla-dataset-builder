@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 use anyhow::Result;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
@@ -141,9 +144,14 @@ pub fn run(path: &Path, as_json: bool, columns: bool) -> Result<()> {
         );
     }
     if columns {
-        println!("\nDisplay name -> exported name:");
-        for field in schema.fields() {
-            println!("  {} -> {}", display_name(field.name()), field.name());
+        println!("\nDisplay name -> canonical ID -> exported name:");
+        for descriptor in sibilla_b_output::registry::registry()? {
+            println!(
+                "  {} -> {} -> {}",
+                display_name(&descriptor.exported_name),
+                descriptor.id,
+                descriptor.exported_name
+            );
         }
     }
     Ok(())

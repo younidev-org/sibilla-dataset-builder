@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 use std::process::Command;
 /// Verify inspection summarizes records, reasons, missing values and readable column names.
 #[test]

@@ -1,0 +1,40 @@
+# Run: sibilla-b extract --config extract-pdf.toml
+# Relative paths are resolved beside this config, not from your shell directory.
+config_version = 1
+command = "extract"
+
+[input]
+path = "./samples"
+format = "pdf"
+# Labels are explicit: benign, malicious, or unknown. Unknown is excluded from datasets.
+label = "unknown"
+# Uncomment to process only the first N files in sorted path order.
+# limit = 10000
+recursive = true
+follow_symlinks = false
+
+[output]
+path = "./features.parquet"
+# format = "parquet" # Needed only if the output filename lacks a recognized extension.
+# failures = "./failures.jsonl"
+
+[runtime]
+workers = 4
+timeout_seconds = 30
+input_mib = 64
+resume = false
+quiet = false
+color = "always"
+
+[provenance]
+# source = "collection-name"
+# collection_id = "related-document-group"
+
+[features.common]
+groups = ["size", "entropy", "byte_histogram"]
+
+[formats.pdf]
+groups = ["structure", "actions", "javascript", "attachments", "links", "image_metadata", "stream_statistics"]
+stream_mode = "decoded"
+decode_images = false
+decoded_mib = 128

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 use std::sync::atomic::{AtomicBool, Ordering};
 static STOP: AtomicBool = AtomicBool::new(false);
 #[derive(Debug)]

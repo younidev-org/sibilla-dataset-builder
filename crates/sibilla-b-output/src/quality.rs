@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 //! Quality reporting by caller-supplied label/source, independent of feature selection.
 //!
 //! Missing values and absent schema keys both contribute to missingness. Constant

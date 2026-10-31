@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 use sibilla_b_core::{Job, Worker};
 use sibilla_b_schema::{Limits, Status};
 use std::{
@@ -13,6 +16,7 @@ fn worker_protocol_reuses_process_and_preserves_failures() {
     for _ in 0..2 {
         let row = worker
             .extract(&Job {
+                selection: Default::default(),
                 path: "/nonexistent-sibilla-test.pdf".into(),
                 limits: Limits::default(),
             })
@@ -42,6 +46,7 @@ fn exited_worker_becomes_failure_record() {
     std::thread::sleep(std::time::Duration::from_millis(30));
     let row = worker
         .extract(&Job {
+            selection: Default::default(),
             path: "unused".into(),
             limits: Limits::default(),
         })
@@ -61,6 +66,7 @@ fn timed_out_process_is_killed() {
     let started = std::time::Instant::now();
     let row = worker
         .extract(&Job {
+            selection: Default::default(),
             path: "unused".into(),
             limits: Limits {
                 timeout_seconds: 0,

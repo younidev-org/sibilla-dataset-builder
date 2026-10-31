@@ -1,10 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 mod benchmark;
+mod config;
 mod extract;
 mod inspect;
 mod interrupt;
 mod ui;
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use clap::{Args, ColorChoice, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 #[derive(Parser)]
 #[command(
@@ -12,7 +17,7 @@ use std::path::PathBuf;
     version,
     about = "Extract static PDF features and build reproducible datasets offline",
     arg_required_else_help = true,
-    after_help = "Command options used below:\n  -i, --input PATH    PDF file or folder for extraction; feature table for dataset build\n  -o, --output PATH   New output file or dataset directory (existing paths are refused)\n                     Extraction: use .parquet or .csv, or pass --format\n  -j, --workers N     Parallel workers (extract: parsers; dataset: output writers)\n  --type LABEL       benign, malicious, or unknown (required for extraction)\n\nFull command options:\n  sibilla-b extract pdf --help\n  sibilla-b dataset build --help\n  sibilla-b benchmark pdf --help\n\nExamples:\n  sibilla-b extract pdf -i samples -o features.parquet --type benign\n  sibilla-b dataset build -i features.parquet -o datasets/pdf-v3\n  sibilla-b benchmark pdf -i samples --workers 1,2,4\n  sibilla-b --color never extract pdf --help"
+    after_help = "Command options used below:\n  -i, --input PATH    PDF file or folder for extraction; feature table for dataset build\n  -o, --output PATH   New output file or dataset directory (existing paths are refused)\n                     Extraction: use .parquet or .csv, or pass --format\n  -j, --workers N     Parallel workers (extract: parsers; dataset: output writers)\n  --type LABEL       benign, malicious, or unknown (required for extraction)\n\nFull command options:\n  sibilla-b extract pdf --help\n  sibilla-b dataset build --help\n  sibilla-b benchmark pdf --help\n\nExamples:\n  sibilla-b extract pdf -i samples -o features.parquet --type benign\n  sibilla-b dataset build -i features.parquet -o datasets/pdf-v5\n  sibilla-b benchmark pdf -i samples --workers 1,2,4\n  sibilla-b --color never extract pdf --help"
 )]
 struct Cli {
     /// Color output: enabled by default; auto detects terminals
@@ -24,10 +29,15 @@ struct Cli {
     /// Hide progress and status messages
     #[arg(short = 'q', long, global = true)]
     quiet: bool,
+    /// Show progress even when the config enables quiet mode
+    #[arg(long, global = true, conflicts_with = "quiet")]
+    no_quiet: bool,
     #[command(subcommand)]
     command: Command,
 }
+// Parsed once; owned variants keep the Clap interface simpler than boxed argument plumbing.
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Command {
     /// Inspect every row of an extraction table, including partial reasons and missing values
     Inspect {
@@ -42,10 +52,18 @@ enum Command {
     },
     #[command(hide = true)]
     Worker,
-    /// Extract versioned feature tables from files or directories
-    Extract {
+    /// Generate or validate commented configuration files
+    Config {
         #[command(subcommand)]
-        format: Format,
+        command: config::ConfigCommand,
+    },
+    /// Extract versioned feature tables using a config or an inline format command
+    #[command(subcommand_negates_reqs = true, args_conflicts_with_subcommands = true)]
+    Extract {
+        #[command(flatten)]
+        args: Extract,
+        #[command(subcommand)]
+        format: Option<Format>,
     },
     /// Assemble labeled datasets with deduplication and reproducible splits
     Dataset {
@@ -76,14 +94,32 @@ enum Dataset {
     /// Validate tables, deduplicate samples and write train/validation/test splits
     Build(Build),
 }
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 enum Label {
     Benign,
     Malicious,
     Unknown,
 }
-#[derive(Args)]
+#[derive(Args, Serialize, Deserialize)]
+#[group(skip)]
 struct Extract {
+    /// Read extraction settings from a versioned TOML config
+    #[arg(long)]
+    config: Option<PathBuf>,
+    /// Disable JPEG decoding explicitly, overriding config
+    #[arg(long, conflicts_with = "decode_images")]
+    no_decode_images: bool,
+    /// Enable recursive scanning explicitly, overriding config
+    #[arg(long, conflicts_with = "no_recursive")]
+    recursive: bool,
+    /// Skip symlinks explicitly, overriding config
+    #[arg(long, conflicts_with = "follow_symlinks")]
+    no_follow_symlinks: bool,
+    #[arg(skip)]
+    selection: sibilla_b_schema::profile::FeatureSelection,
+    #[arg(skip)]
+    snapshot: Option<serde_json::Value>,
     /// Attempt bounded JPEG image decoding in decoded mode
     #[arg(long)]
     decode_images: bool,
@@ -91,13 +127,13 @@ struct Extract {
     #[arg(long, default_value = "decoded", value_parser = ["structural", "decoded"])]
     stream_mode: String,
     /// Input file or directory (recursive by default)
-    #[arg(short = 'i', long, required_unless_present = "schema_version")]
+    #[arg(short = 'i', long, required_unless_present_any = ["schema_version", "config"])]
     input: Option<PathBuf>,
     /// Required explicit label; use unknown for unlabeled extraction
-    #[arg(long = "type", value_enum, required_unless_present = "schema_version")]
+    #[arg(long = "type", value_enum, required_unless_present_any = ["schema_version", "config"])]
     label: Option<Label>,
     /// New .csv or .parquet file (or set --format); existing paths are refused
-    #[arg(short = 'o', long, required_unless_present = "schema_version")]
+    #[arg(short = 'o', long, required_unless_present_any = ["schema_version", "config"])]
     output: Option<PathBuf>,
     /// Process at most N files, selected in sorted path order (N must be positive)
     #[arg(long)]
@@ -117,6 +153,9 @@ struct Extract {
     /// Reuse committed checkpoints after validating configuration and source hashes
     #[arg(long)]
     resume: bool,
+    /// Start a new run even when the config requests resume
+    #[arg(long, conflicts_with = "resume")]
+    no_resume: bool,
     /// Write partial/failed/rejected records to an independent JSONL sidecar
     #[arg(long)]
     failures: Option<PathBuf>,
@@ -139,17 +178,24 @@ struct Extract {
     #[arg(long,value_parser=["csv","parquet"])]
     format: Option<String>,
 }
-#[derive(Args)]
+#[derive(Args, Serialize, Deserialize)]
 struct Build {
+    /// Read dataset settings from a versioned TOML config
+    #[arg(long)]
+    config: Option<PathBuf>,
+    #[arg(skip)]
+    projection: sibilla_b_dataset::projection::ProjectionOptions,
+    #[arg(skip)]
+    snapshot: Option<serde_json::Value>,
     /// Output writer limit (1–256); manifest and features use at most two writers
     #[arg(short='j',long,default_value_t=default_workers() as u16,value_parser=clap::value_parser!(u16).range(1..=256))]
     workers: u16,
     /// Feature table; repeat -i to merge multiple tables
-    #[arg(short = 'i', long, required = true)]
+    #[arg(short = 'i', long, required_unless_present = "config")]
     input: Vec<PathBuf>,
     /// New dataset directory; existing paths are refused
     #[arg(short = 'o', long)]
-    output: PathBuf,
+    output: Option<PathBuf>,
     /// Train:validation:test percentages, totaling 100
     #[arg(long, default_value = "70:15:15")]
     split: String,
@@ -194,9 +240,20 @@ fn main() -> std::process::ExitCode {
         .color(color)
         .styles(styles)
         .get_matches_from(args);
-    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
+    let mut cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
+    if let Err(error) = config::presentation(&mut cli, &matches) {
+        eprintln!("error: {error:#}");
+        return std::process::ExitCode::FAILURE;
+    }
+    let color = if cli.no_color {
+        ColorChoice::Never
+    } else if cli.color == ColorChoice::Always {
+        color
+    } else {
+        cli.color
+    };
     let ui = ui::Ui::new(color, cli.quiet);
-    match run(cli, &ui) {
+    match run(cli, &ui, &matches) {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
             eprintln!(
@@ -212,7 +269,7 @@ fn main() -> std::process::ExitCode {
     }
 }
 /// Dispatch the selected CLI command without contaminating machine-readable stdout.
-fn run(cli: Cli, ui: &ui::Ui) -> Result<()> {
+fn run(cli: Cli, ui: &ui::Ui, matches: &clap::ArgMatches) -> Result<()> {
     match cli.command {
         Command::Inspect {
             input,
@@ -220,15 +277,43 @@ fn run(cli: Cli, ui: &ui::Ui) -> Result<()> {
             columns,
         } => inspect::run(&input, json, columns)?,
         Command::Worker => sibilla_b_core::worker_loop(sibilla_b_pdf::PdfExtractor)?,
-        Command::Extract {
-            format: Format::Pdf(args),
-        } if args.schema_version => println!("{}", sibilla_b_schema::SCHEMA_VERSION),
-        Command::Extract {
-            format: Format::Pdf(args),
-        } => extract::run(args, ui)?,
+        Command::Config { command } => config::command(command)?,
+        Command::Extract { args, format } => {
+            let extract_matches = matches
+                .subcommand_matches("extract")
+                .context("extract arguments")?;
+            let (args, argument_matches) = match format {
+                Some(Format::Pdf(args)) => (
+                    args,
+                    extract_matches
+                        .subcommand_matches("pdf")
+                        .context("PDF arguments")?,
+                ),
+                None => (args, extract_matches),
+            };
+            if args.schema_version {
+                println!("{}", sibilla_b_schema::SCHEMA_VERSION);
+            } else {
+                extract::run(config::resolve_extract(args, argument_matches)?, ui)?;
+            }
+        }
         Command::Dataset {
             command: Dataset::Build(args),
         } => {
+            let mut args = config::resolve_build(
+                args,
+                matches
+                    .subcommand_matches("dataset")
+                    .and_then(|m| m.subcommand_matches("build"))
+                    .context("build arguments")?,
+            )?;
+            if let Some(snapshot) = args.snapshot.as_mut() {
+                snapshot["settings"]["presentation"] =
+                    serde_json::json!({"quiet":ui.quiet,"color_enabled":ui.color});
+                snapshot["run_hash"] =
+                    serde_json::Value::from(config::fingerprint(&snapshot["settings"])?);
+            }
+            let output = args.output.as_ref().context("output is required")?;
             if args.temporal_column.is_some() {
                 bail!("temporal mode requires timestamps not present in the current schema");
             }
@@ -244,17 +329,19 @@ fn run(cli: Cli, ui: &ui::Ui) -> Result<()> {
                 bail!("invalid conflict policy");
             }
             let progress = ui.progress("Building dataset", None);
-            sibilla_b_dataset::build(
+            sibilla_b_dataset::build_configured(
                 &args.input,
-                &args.output,
+                output,
                 split,
                 args.seed,
                 args.group_column.as_deref(),
                 args.conflict_policy == "quarantine",
                 args.workers as usize,
+                &args.projection,
+                args.snapshot.as_ref(),
             )?;
             progress.finish_and_clear();
-            ui.success(&format!("Dataset saved to {}", args.output.display()));
+            ui.success(&format!("Dataset saved to {}", output.display()));
         }
         Command::Benchmark {
             format: BenchmarkFormat::Pdf(args),

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 //! Independent image metadata and optional bounded JPEG analysis.
 //!
 //! Metadata covers loaded streams declaring `Subtype Image`, including streams with

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 younidev-org.
+
 use std::process::Command;
 /// Verify parallel dataset writers produce identical artifact bytes and reject zero workers.
 #[test]
@@ -24,6 +27,11 @@ fn dataset_workers_preserve_artifacts() {
     })
     .unwrap();
     let table = dir.path().join("many.parquet");
+    std::fs::copy(
+        dir.path().join(".input.parquet.config.json"),
+        dir.path().join(".many.parquet.config.json"),
+    )
+    .unwrap();
     let row = original.unwrap();
     let rows = (0..600).map(|i| {
         let mut row = row.clone();
@@ -53,7 +61,6 @@ fn dataset_workers_preserve_artifacts() {
         "manifest.parquet",
         "features.parquet",
         "report.json",
-        "dataset_metadata.json",
         "splits/train.parquet",
         "splits/validation.parquet",
         "splits/test.parquet",
@@ -64,6 +71,18 @@ fn dataset_workers_preserve_artifacts() {
             "{file}"
         );
     }
+    let read_metadata = |name: &str| {
+        let mut value: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(dir.path().join(name).join("dataset_metadata.json")).unwrap(),
+        )
+        .unwrap();
+        value["artifact_sha256"]
+            .as_object_mut()
+            .unwrap()
+            .remove("resolved_config.json");
+        value
+    };
+    assert_eq!(read_metadata("dataset-1"), read_metadata("dataset-4"));
     assert!(
         !Command::new(env!("CARGO_BIN_EXE_sibilla-b"))
             .args(["dataset", "build", "-i"])
